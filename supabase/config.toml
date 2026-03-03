@@ -1,0 +1,17 @@
+project_id = "fecwhtqugcxnvvvmcxif"
+
+[api]
+port = 45321
+enabled = true
+
+[db]
+port = 45322
+
+[studio]
+port = 45323
+
+[inbucket]
+port = 45324
+
+[functions.manage-users]
+verify_jwt = false
