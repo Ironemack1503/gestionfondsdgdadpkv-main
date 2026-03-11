@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { AppRole } from '@/types/database';
+import { toAuthEmail } from '@/lib/auth';
 
 export interface LocalUser {
   id: string;
@@ -25,88 +26,53 @@ export function useLocalUserManagement() {
     return trimmed.includes('@') ? trimmed : `${trimmed}@local.test`;
   };
 
-  // Fetch all users via profiles + user_roles
+  // Fetch all users via local_users table
   const { data: users = [], isLoading: loading, refetch } = useQuery({
     queryKey: ['local-users'],
     queryFn: async () => {
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('user_id, username, full_name, is_active, is_locked, failed_login_attempts, last_login_at, created_at, updated_at')
+      const { data: localUsers, error } = await supabase
+        .from('local_users')
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (profilesError) throw profilesError;
+      if (error) throw error;
 
-      const { data: roles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
-
-      if (rolesError) throw rolesError;
-
-      const rolesByUser = new Map((roles || []).map(role => [role.user_id, role.role as AppRole]));
-
-      return (profiles || []).map(profile => ({
-        id: profile.user_id,
-        username: profile.username,
-        full_name: profile.full_name,
-        role: rolesByUser.get(profile.user_id) || 'observateur',
-        is_active: profile.is_active,
-        is_locked: profile.is_locked,
-        failed_login_attempts: profile.failed_login_attempts,
-        last_login_at: profile.last_login_at,
-        created_at: profile.created_at,
-        updated_at: profile.updated_at,
+      return (localUsers || []).map(user => ({
+        id: user.id,
+        username: user.username,
+        full_name: user.full_name,
+        role: user.role as AppRole,
+        is_active: user.is_active,
+        is_locked: false, // local_users doesn't have this field
+        failed_login_attempts: 0, // not tracked in local_users
+        last_login_at: user.last_login_at,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
       })) as LocalUser[];
     },
   });
 
   // Create user mutation
   const createUserMutation = useMutation({
-    mutationFn: async (params: { 
-      username: string; 
-      password: string; 
-      fullName: string; 
-      role: AppRole 
+    mutationFn: async (params: {
+      username: string;
+      password: string;
+      fullName: string;
+      role: AppRole
     }) => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const previousSession = sessionData.session;
-
-      const { data, error } = await supabase.auth.signUp({
-        email: toAuthEmail(params.username),
-        password: params.password,
-        options: {
-          data: { full_name: params.fullName },
-        },
+      // Call local-auth function to create user
+      const { data, error } = await supabase.functions.invoke('local-auth', {
+        body: {
+          action: 'create_user',
+          username: params.username,
+          password: params.password,
+          full_name: params.fullName,
+          role: params.role
+        }
       });
 
       if (error) throw error;
-      if (!data.user) throw new Error("Création utilisateur échouée");
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          user_id: data.user.id,
-          username: params.username,
-          full_name: params.fullName || null,
-          is_active: true,
-          is_locked: false,
-          failed_login_attempts: 0,
-        }, { onConflict: 'user_id' });
-
-      if (profileError) throw profileError;
-
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .upsert({ user_id: data.user.id, role: params.role }, { onConflict: 'user_id' });
-
-      if (roleError) throw roleError;
-
-      if (previousSession) {
-        const { error: restoreError } = await supabase.auth.setSession({
-          access_token: previousSession.access_token,
-          refresh_token: previousSession.refresh_token,
-        });
-        if (restoreError) throw restoreError;
-      }
+      if (data?.error) throw new Error(data.error);
 
       return data;
     },

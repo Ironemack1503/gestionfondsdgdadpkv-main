@@ -174,7 +174,10 @@ export default function ProfilePage() {
       if (isEditingOther) {
         if (!isAdmin) throw new Error("Accès refusé");
 
-        const { error } = await supabase.auth.resetPasswordForEmail(profile.username);
+        // the API expects an email address; convert our username first
+        const { error } = await supabase.auth.resetPasswordForEmail(
+          toAuthEmail(profile.username)
+        );
         if (error) throw error;
 
         toast({

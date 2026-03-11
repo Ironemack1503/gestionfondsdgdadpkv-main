@@ -223,7 +223,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      case 'validate': {
+      case 'validate_session': {
         const { token } = params;
         
         if (!token) {

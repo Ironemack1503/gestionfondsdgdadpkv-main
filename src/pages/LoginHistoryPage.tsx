@@ -53,16 +53,6 @@ const LoginHistoryPage = () => {
       ),
     },
     {
-      key: 'user_email',
-      header: 'Email',
-      render: (entry) => (
-        <div className="flex items-center gap-2">
-          <Mail className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm">{entry.user_email || '-'}</span>
-        </div>
-      ),
-    },
-    {
       key: 'login_at',
       header: 'Date de connexion',
       render: (entry) => (

@@ -1,0 +1,6 @@
+﻿"Num_Auto_Mvt","Num_Mvt","Mvt","MT_Chiffre_Mvt_R","MT_Chiffre_Mvt_D","MT_Lttre_Mvt","Motif_Mvt","Date_Mvt","Date_Mvt1","Code_Service","Service_Mvt","Solde_Av_Mvt","Solde_Av_Mvt1","Solde_Ap_Mvt","Solde_Ap_Mvt1","Heure_Mvt","Benef_Mvt","Code_Rubrique","Rubrique_Mvt","REP","MTAV","COD"
+"63","BS-1","Recettes","20000","0","Vingt mille francs congolais","Entréé fonds","27/04/2022 00:00:00","2022/04/27","","","0","","0","","","LABORATOIRE","","","0","0","001"
+"64","BS-2","Recettes","30000","0","Trente mille francs congolais","Entréé fonds","27/04/2022 00:00:00","2022/04/27","","","0","","0","","","PHARMACIE","","","0","0","002"
+"65","1","Dépenses","0","10000","Dix mille francs congolais","Achat réactifs de labo","27/04/2022 00:00:00","2022/04/27","","LABORATOIRE","0","","0","","30/12/1899 20:54:49","LABORATOIRE","8","Achat réactifs de labo","20000","0","001"
+"66","2","Dépenses","0","3000","Trois mille francs congolais","Achat drogue anest et cons salle op","27/04/2022 00:00:00","2022/04/27","","LABORATOIRE","0","","0","","30/12/1899 20:55:57","LABORATOIRE","9","Achat drogue anest et cons salle op","20000","0","001"
+"67","3","Dépenses","0","5000","Cinq mille francs congolais","Achat detergents","27/04/2022 00:00:00","2022/04/27","","PHARMACIE","0","","0","","30/12/1899 20:56:39","PHARMACIE","11","Achat detergents","30000","0","002"
