@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useLocalAuth } from '@/contexts/LocalAuthContext';
 import { saveToCache, getFromCache } from './useLocalStorageCache';
+import { fetchCsvData } from '@/utils/fetchCsvData';
 
 export interface Rubrique {
   id: string;
@@ -23,42 +24,40 @@ export function useRubriques() {
   const queryClient = useQueryClient();
   const { user } = useLocalAuth();
 
+  // Hook unifié : mode local (CSV) ou Supabase
   const { data: rubriques = [], isLoading, error } = useQuery({
-    queryKey: ['rubriques'],
+    queryKey: ['rubriques', useLocal],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('rubriques')
-        .select('*')
-        .order('code', { ascending: true });
-
-      if (error) throw error;
-      const typedData = data as Rubrique[];
-      
-      // Save to cache
-      saveToCache('rubriques', typedData);
-      return typedData;
+      if (useLocal) {
+        return await fetchCsvData('rubriques.csv');
+      } else {
+        const { data, error } = await supabase
+          .from('rubriques')
+          .select('*')
+          .order('code', { ascending: true });
+        if (error) throw error;
+        const typedData = data as Rubrique[];
+        saveToCache('rubriques', typedData);
+        return typedData;
+      }
     },
     staleTime: 60000, // 1 minute
     placeholderData: () => getFromCache<Rubrique[]>('rubriques', 24 * 60 * 60 * 1000) ?? undefined,
   });
 
   const createRubrique = useMutation({
-    mutationFn: async (rubrique: { code: string; libelle: string; categorie?: string; no_beo?: string; imp?: string }) => {
+    mutationFn: async (newRubrique: Omit<Rubrique, 'id'>) => {
       const { data, error } = await supabase
         .from('rubriques')
-        .insert({
-          ...rubrique,
-          created_by: user?.id ?? null,
-        })
+        .insert([newRubrique])
         .select()
         .single();
-
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rubriques'] });
-      toast({ title: 'Succès', description: 'Rubrique créée avec succès' });
+      toast({ title: 'Succès', description: 'Rubrique créée' });
     },
     onError: (error: Error) => {
       toast({ title: 'Erreur', description: error.message, variant: 'destructive' });

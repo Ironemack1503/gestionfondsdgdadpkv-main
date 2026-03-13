@@ -1,9 +1,11 @@
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useCallback, useMemo } from 'react';
 import { saveToCache, getFromCache, clearCache } from './useLocalStorageCache';
 import { useLocalAuth } from '@/contexts/LocalAuthContext';
+import { fetchCsvData } from '@/utils/fetchCsvData';
 
 export interface Recette {
   id: string;
@@ -32,61 +34,42 @@ export interface Recette {
 
 const DEFAULT_PAGE_SIZE = 50;
 
-export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE) {
+export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = false) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useLocalAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
 
-  // Fetch total count
-  const { data: totalCount = 0 } = useQuery({
-    queryKey: ['recettes-count'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('recettes')
-        .select('*', { count: 'exact', head: true });
-
-      if (error) throw error;
-      return count || 0;
-    },
-    staleTime: 60000,
-  });
-
+  // Hook unifié : mode local (CSV) ou Supabase avec pagination
   const { data: recettes = [], isLoading, error } = useQuery({
-    queryKey: ['recettes', page, pageSize],
+    queryKey: ['recettes', useLocal, page, pageSize],
     queryFn: async () => {
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-
-      const { data, error } = await supabase
-        .from('recettes')
-        .select('*')
-        .order('date', { ascending: false })
-        .order('heure', { ascending: false })
-        .range(from, to);
-
-      if (error) {
-        console.error('Erreur lors du chargement des recettes:', error);
-        throw error;
+      if (useLocal) {
+        // Charge tout le CSV et applique la pagination côté client
+        const all = await fetchCsvData('recettes.csv');
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize;
+        // Ajoute l'alias date_transaction pour compatibilité
+        return all.slice(from, to).map((d: any) => ({
+          ...d,
+          date_transaction: d.date
+        })) as Recette[];
+      } else {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error } = await supabase
+          .from('recettes')
+          .select('*')
+          .order('date', { ascending: false })
+          .order('heure', { ascending: false })
+          .range(from, to);
+        if (error) throw error;
+        return (data || []).map(r => ({ ...r, date_transaction: r.date }));
       }
-      
-      console.log('✅ Recettes chargées depuis la base:', data?.length || 0, data);
-      
-      const typedData = (data || []).map(r => ({
-        ...r,
-        date_transaction: r.date  // Créer l'alias pour compatibilité
-      })) as Recette[];
-      
-      // Cache first page only
-      if (page === 1) {
-        saveToCache('recettes-page1', typedData);
-      }
-      return typedData;
     },
-    staleTime: 30000,
-    placeholderData: () => page === 1 ? getFromCache<Recette[]>('recettes-page1', 30 * 60 * 1000) : undefined,
   });
+// ...existing code...
 
   const createRecette = useMutation({
     mutationFn: async (recette: {

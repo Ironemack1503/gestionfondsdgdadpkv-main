@@ -1,9 +1,11 @@
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useState, useCallback, useMemo } from 'react';
 import { saveToCache, getFromCache, clearCache } from './useLocalStorageCache';
 import { useLocalAuth } from '@/contexts/LocalAuthContext';
+import { fetchCsvData } from '@/utils/fetchCsvData';
 
 export interface Depense {
   id: string;
@@ -38,59 +40,45 @@ export interface Depense {
 
 const DEFAULT_PAGE_SIZE = 50;
 
-export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE) {
+export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = false) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useLocalAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
 
-  // Fetch total count
-  const { data: totalCount = 0 } = useQuery({
-    queryKey: ['depenses-count'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('depenses')
-        .select('*', { count: 'exact', head: true });
-
-      if (error) throw error;
-      return count || 0;
-    },
-    staleTime: 60000,
-  });
-
+  // Hook unifié : mode local (CSV) ou Supabase avec pagination
   const { data: depenses = [], isLoading, error } = useQuery({
-    queryKey: ['depenses', page, pageSize],
+    queryKey: ['depenses', useLocal, page, pageSize],
     queryFn: async () => {
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-
-      const { data, error } = await supabase
-        .from('depenses')
-        .select(`
-          *,
-          rubrique:rubriques(id, code, libelle)
-        `)
-        .order('date', { ascending: false })
-        .order('heure', { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-      const typedData = (data || []).map(d => ({
-        ...d,
-        date_transaction: d.date  // Créer l'alias pour compatibilité
-      })) as Depense[];
-      
-      // Cache first page only
-      if (page === 1) {
-        saveToCache('depenses-page1', typedData);
+      if (useLocal) {
+        // Charge tout le CSV et applique la pagination côté client
+        const all = await fetchCsvData('depenses.csv');
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize;
+        // Ajoute l'alias date_transaction pour compatibilité
+        return all.slice(from, to).map((d: any) => ({
+          ...d,
+          date_transaction: d.date
+        })) as Depense[];
+      } else {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error } = await supabase
+          .from('depenses')
+          .select(`
+            *,
+            rubrique:rubriques(id, code, libelle)
+          `)
+          .order('date', { ascending: false })
+          .order('heure', { ascending: false })
+          .range(from, to);
+        if (error) throw error;
+        return data || [];
       }
-      return typedData;
     },
-    staleTime: 30000,
-    placeholderData: () =>
-      page === 1 ? (getFromCache<Depense[]>('depenses-page1', 30 * 60 * 1000) ?? undefined) : undefined,
   });
+// ...existing code...
 
   // Memoize fetchAllForExport
   const fetchAllForExport = useCallback(async () => {
