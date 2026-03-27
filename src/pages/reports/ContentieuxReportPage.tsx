@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRecettes } from '@/hooks/useRecettes';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useDepenses } from '@/hooks/useDepenses';
 import { formatMontant } from '@/lib/utils';
 import { exportToPDF, exportToExcel, PDFExportSettings } from '@/lib/exportUtils';
@@ -41,13 +42,15 @@ interface ContentieuxItem {
 }
 
 export default function ContentieuxReportPage() {
-  const [dateDebut, setDateDebut] = useState(format(subMonths(new Date(), 3), 'yyyy-MM-dd'));
-  const [dateFin, setDateFin] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const latestDate = new Date(latestYear, latestMonth - 1, 1);
+  const [dateDebut, setDateDebut] = useState(format(subMonths(latestDate, 3), 'yyyy-MM-dd'));
+  const [dateFin, setDateFin] = useState(format(latestDate, 'yyyy-MM-dd'));
   const [filterStatus, setFilterStatus] = useState<ContentieuxStatus | 'tous'>('tous');
   const [filterType, setFilterType] = useState<ContentieuxType | 'tous'>('tous');
 
-  const { recettes, isLoading: loadingRecettes } = useRecettes();
-  const { depenses, isLoading: loadingDepenses } = useDepenses();
+  const { recettes, isLoading: loadingRecettes } = useRecettes(100000);
+  const { depenses, isLoading: loadingDepenses } = useDepenses(100000);
 
   // Generate contentieux data from transactions with anomalies
   // In a real app, this would come from a dedicated contentieux table

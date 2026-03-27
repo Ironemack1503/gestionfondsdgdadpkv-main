@@ -13,5 +13,8 @@ port = 45323
 [inbucket]
 port = 45324
 
+[analytics]
+enabled = false
+
 [functions.manage-users]
 verify_jwt = false

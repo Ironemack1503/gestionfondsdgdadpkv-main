@@ -11,8 +11,8 @@ export interface Recette {
   id: string;
   numero_bon: number;  // N°d'ord (Auto)
   numero_beo?: string | null;  // N°BEO (4 chiffres)
-  date: string;  // Date d'enregistrement
-  date_transaction?: string;  // Alias pour compatibilité
+  date?: string;  // Alias pour compatibilité
+  date_transaction: string;  // Date d'enregistrement
   heure: string;  // Heure d'enregistrement
   libelle: string;  // LIBELLE (descriptif)
   motif: string;  // Motif (legacy)
@@ -61,15 +61,27 @@ export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
         const { data, error } = await supabase
           .from('recettes')
           .select('*')
-          .order('date', { ascending: false })
+          .order('date_transaction', { ascending: false })
           .order('heure', { ascending: false })
           .range(from, to);
         if (error) throw error;
-        return (data || []).map(r => ({ ...r, date_transaction: r.date }));
+        return (data || []).map(r => ({ ...r, date: r.date_transaction }));
       }
     },
   });
-// ...existing code...
+
+  // Fetch total count
+  const { data: totalCount = 0 } = useQuery({
+    queryKey: ['recettes-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('recettes')
+        .select('*', { count: 'exact', head: true });
+
+      if (error) throw error;
+      return count || 0;
+    },
+  });
 
   const createRecette = useMutation({
     mutationFn: async (recette: {

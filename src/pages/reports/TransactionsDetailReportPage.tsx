@@ -22,6 +22,7 @@ import { useRecettes } from '@/hooks/useRecettes';
 import { useDepenses } from '@/hooks/useDepenses';
 import { useRubriques } from '@/hooks/useRubriques';
 import { useServices } from '@/hooks/useServices';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { formatMontant } from '@/lib/utils';
 import { exportToPDF, exportToExcel, PDFExportSettings } from '@/lib/exportUtils';
 
@@ -58,10 +59,12 @@ type SortOrder = 'asc' | 'desc';
 type ViewMode = 'detail' | 'synthese-rubrique' | 'synthese-service' | 'synthese-jour';
 
 export default function TransactionsDetailReportPage() {
-  const [mois, setMois] = useState(new Date().getMonth() + 1);
-  const [annee, setAnnee] = useState(new Date().getFullYear());
-  const [dateDebut, setDateDebut] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-  const [dateFin, setDateFin] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const [mois, setMois] = useState(latestMonth);
+  const [annee, setAnnee] = useState(latestYear);
+  const latestDate = new Date(latestYear, latestMonth - 1);
+  const [dateDebut, setDateDebut] = useState(format(startOfMonth(latestDate), 'yyyy-MM-dd'));
+  const [dateFin, setDateFin] = useState(format(endOfMonth(latestDate), 'yyyy-MM-dd'));
   const [filterType, setFilterType] = useState<'tous' | 'recette' | 'depense'>('tous');
   const [filterRubrique, setFilterRubrique] = useState<string>('tous');
   const [filterService, setFilterService] = useState<string>('tous');
@@ -70,8 +73,8 @@ export default function TransactionsDetailReportPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [viewMode, setViewMode] = useState<ViewMode>('detail');
 
-  const { recettes, isLoading: loadingRecettes } = useRecettes();
-  const { depenses, isLoading: loadingDepenses } = useDepenses();
+  const { recettes, isLoading: loadingRecettes } = useRecettes(100000);
+  const { depenses, isLoading: loadingDepenses } = useDepenses(100000);
   const { rubriques } = useRubriques();
   const { services } = useServices();
 

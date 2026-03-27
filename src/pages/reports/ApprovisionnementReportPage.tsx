@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRecettes } from '@/hooks/useRecettes';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useDepenses } from '@/hooks/useDepenses';
 import { formatMontant } from '@/lib/utils';
 import { exportToPDF, exportToExcel, PDFExportSettings } from '@/lib/exportUtils';
@@ -41,14 +42,16 @@ interface RubriqueComparison {
 }
 
 export default function ApprovisionnementReportPage() {
-  const [mois, setMois] = useState(new Date().getMonth() + 1);
-  const [annee, setAnnee] = useState(new Date().getFullYear());
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const [mois, setMois] = useState(latestMonth);
+  const [annee, setAnnee] = useState(latestYear);
   const [viewMode, setViewMode] = useState<'journalier' | 'mensuel' | 'rubrique'>('journalier');
-  const [dateDebut, setDateDebut] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-  const [dateFin, setDateFin] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  const latestDate = new Date(latestYear, latestMonth - 1);
+  const [dateDebut, setDateDebut] = useState(format(startOfMonth(latestDate), 'yyyy-MM-dd'));
+  const [dateFin, setDateFin] = useState(format(endOfMonth(latestDate), 'yyyy-MM-dd'));
 
-  const { recettes, isLoading: loadingRecettes } = useRecettes();
-  const { depenses, isLoading: loadingDepenses } = useDepenses();
+  const { recettes, isLoading: loadingRecettes } = useRecettes(100000);
+  const { depenses, isLoading: loadingDepenses } = useDepenses(100000);
 
   // Filtered data based on period
   const filteredRecettes = useMemo(() => {

@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useRecettes } from "@/hooks/useRecettes";
 import { useDepenses } from "@/hooks/useDepenses";
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { exportToPDF, exportToExcel, getFeuilleCaisseExportConfig, PDFExportSettings } from "@/lib/exportUtils";
 import { sortOperationsWithSoldeFirst } from "@/lib/rubriquesSortUtils";
 
@@ -44,16 +45,16 @@ interface Operation {
 }
 
 export default function FeuilleCaissePage() {
-  const { recettes, isLoading: loadingRecettes } = useRecettes();
-  const { depenses, isLoading: loadingDepenses } = useDepenses();
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const { recettes, isLoading: loadingRecettes } = useRecettes(100000);
+  const { depenses, isLoading: loadingDepenses } = useDepenses(100000);
   
   const [dateDebut, setDateDebut] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    return `${latestYear}-${String(latestMonth).padStart(2, '0')}-01`;
   });
   const [dateFin, setDateFin] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`;
+    const lastDay = new Date(latestYear, latestMonth, 0).getDate();
+    return `${latestYear}-${String(latestMonth).padStart(2, '0')}-${lastDay}`;
   });
   const [showFilters, setShowFilters] = useState(false);
 
@@ -62,33 +63,33 @@ export default function FeuilleCaissePage() {
   // Combine and filter operations
   const operations: Operation[] = sortOperationsWithSoldeFirst([
     ...(recettes || [])
-      .filter(r => r.date >= dateDebut && r.date <= dateFin)
+      .filter(r => (r.date || r.date_transaction) >= dateDebut && (r.date || r.date_transaction) <= dateFin)
       .map(r => ({
         id: r.id,
-        date: r.date,
-        heure: r.heure,
+        date: r.date || r.date_transaction,
+        heure: r.heure || '00:00:00',
         reference: `REC-${String(r.numero_bon).padStart(4, '0')}`,
         type: 'recette' as const,
-        designation: `${r.motif} - ${r.provenance}`,
+        designation: `${r.motif || ''} - ${r.provenance || ''}`,
         recette: Number(r.montant),
         depense: null,
       })),
     ...(depenses || [])
-      .filter(d => d.date >= dateDebut && d.date <= dateFin)
+      .filter(d => (d.date || d.date_transaction) >= dateDebut && (d.date || d.date_transaction) <= dateFin)
       .map(d => ({
         id: d.id,
-        date: d.date,
-        heure: d.heure,
+        date: d.date || d.date_transaction,
+        heure: d.heure || '00:00:00',
         reference: `DEP-${String(d.numero_bon).padStart(4, '0')}`,
         type: 'depense' as const,
-        designation: `${d.motif} - ${d.beneficiaire}`,
+        designation: `${d.motif || ''} - ${d.beneficiaire || ''}`,
         recette: null,
         depense: Number(d.montant),
       })),
   ].sort((a, b) => {
-    const dateCompare = a.date.localeCompare(b.date);
+    const dateCompare = (a.date || '').localeCompare(b.date || '');
     if (dateCompare !== 0) return dateCompare;
-    return a.heure.localeCompare(b.heure);
+    return (a.heure || '').localeCompare(b.heure || '');
   }));
 
   // Calculate running balance
@@ -172,8 +173,8 @@ export default function FeuilleCaissePage() {
               </Button>
               <ExportButtons
                 onExportPDF={async (settings?: PDFExportSettings) => {
-                  const filteredRecettes = (recettes || []).filter(r => r.date >= dateDebut && r.date <= dateFin);
-                  const filteredDepenses = (depenses || []).filter(d => d.date >= dateDebut && d.date <= dateFin);
+                  const filteredRecettes = (recettes || []).filter(r => (r.date || r.date_transaction) >= dateDebut && (r.date || r.date_transaction) <= dateFin);
+                  const filteredDepenses = (depenses || []).filter(d => (d.date || d.date_transaction) >= dateDebut && (d.date || d.date_transaction) <= dateFin);
                   const config = getFeuilleCaisseExportConfig(
                     filteredRecettes,
                     filteredDepenses.map(d => ({ ...d, rubrique_libelle: d.rubrique?.libelle || 'N/A' })),
@@ -183,8 +184,8 @@ export default function FeuilleCaissePage() {
                   await exportToPDF({ ...config, pdfSettings: settings });
                 }}
                 onExportExcel={(settings) => {
-                  const filteredRecettes = (recettes || []).filter(r => r.date >= dateDebut && r.date <= dateFin);
-                  const filteredDepenses = (depenses || []).filter(d => d.date >= dateDebut && d.date <= dateFin);
+                  const filteredRecettes = (recettes || []).filter(r => (r.date || r.date_transaction) >= dateDebut && (r.date || r.date_transaction) <= dateFin);
+                  const filteredDepenses = (depenses || []).filter(d => (d.date || d.date_transaction) >= dateDebut && (d.date || d.date_transaction) <= dateFin);
                   const config = getFeuilleCaisseExportConfig(
                     filteredRecettes,
                     filteredDepenses.map(d => ({ ...d, rubrique_libelle: d.rubrique?.libelle || 'N/A' })),

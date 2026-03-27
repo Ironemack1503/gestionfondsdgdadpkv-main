@@ -24,6 +24,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useRubriques } from '@/hooks/useRubriques';
 import { useServices } from '@/hooks/useServices';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 
 const moisNoms = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -63,9 +64,9 @@ interface SyntheseMensuelle {
 }
 
 export default function SyntheseCaissePage() {
-  const currentDate = new Date();
-  const [selectedMois, setSelectedMois] = useState(currentDate.getMonth() + 1);
-  const [selectedAnnee, setSelectedAnnee] = useState(currentDate.getFullYear());
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const [selectedMois, setSelectedMois] = useState(latestMonth);
+  const [selectedAnnee, setSelectedAnnee] = useState(latestYear);
   const [viewMode, setViewMode] = useState<ViewMode>('global');
   const [periodMode, setPeriodMode] = useState<PeriodMode>('mensuel');
   

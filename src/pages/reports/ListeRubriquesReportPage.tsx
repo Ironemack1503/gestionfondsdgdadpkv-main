@@ -18,14 +18,16 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { exportToPDF, exportToExcel, ExportColumn } from '@/lib/exportUtils';
 import { useRubriques } from '@/hooks/useRubriques';
 import { useDepenses } from '@/hooks/useDepenses';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 
 export default function ListeRubriquesReportPage() {
+  const { latestYear } = useLatestDataDate();
   const [searchTerm, setSearchTerm] = useState('');
   const [showInactiveOnly, setShowInactiveOnly] = useState(false);
-  const [selectedAnnee, setSelectedAnnee] = useState(new Date().getFullYear());
+  const [selectedAnnee, setSelectedAnnee] = useState(latestYear);
   
   const { rubriques, isLoading: loadingRubriques } = useRubriques();
-  const { depenses, isLoading: loadingDepenses } = useDepenses();
+  const { depenses, isLoading: loadingDepenses } = useDepenses(100000);
 
   // Calculate stats per rubrique
   const rubriquesWithStats = useMemo(() => {

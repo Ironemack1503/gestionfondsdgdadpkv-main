@@ -19,7 +19,7 @@ export interface Rubrique {
   updated_at: string;
 }
 
-export function useRubriques() {
+export function useRubriques(useLocal = false) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useLocalAuth();

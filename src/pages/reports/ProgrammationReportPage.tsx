@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useReportData, numberToFrenchWords } from '@/hooks/useReportData';
 import { useAdvancedExport } from '@/hooks/useAdvancedExport';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { ProgrammationOfficielReport } from '@/components/reports/ProgrammationOfficielReport';
 
 const moisNoms = [
@@ -24,9 +25,9 @@ const moisNoms = [
 ];
 
 export default function ProgrammationReportPage() {
-  const currentDate = new Date();
-  const [selectedMois, setSelectedMois] = useState(currentDate.getMonth() + 1);
-  const [selectedAnnee, setSelectedAnnee] = useState(currentDate.getFullYear());
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const [selectedMois, setSelectedMois] = useState(latestMonth);
+  const [selectedAnnee, setSelectedAnnee] = useState(latestYear);
   const [exporting, setExporting] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'report'>('report');
   

@@ -81,8 +81,8 @@ export function ReportBuilder() {
   } = useReportBuilderExport();
 
   // Data sources
-  const { recettes, isLoading: loadingRecettes, fetchAllForExport: fetchRecettes } = useRecettes();
-  const { depenses, isLoading: loadingDepenses, fetchAllForExport: fetchDepenses } = useDepenses();
+  const { recettes, isLoading: loadingRecettes, fetchAllForExport: fetchRecettes } = useRecettes(100000);
+  const { depenses, isLoading: loadingDepenses, fetchAllForExport: fetchDepenses } = useDepenses(100000);
   const { programmations, isLoading: loadingProg } = useProgrammations();
 
   const isLoading = loadingRecettes || loadingDepenses || loadingProg;

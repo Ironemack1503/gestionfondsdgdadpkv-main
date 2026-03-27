@@ -4,6 +4,7 @@ import { ExportButtons } from "@/components/shared/ExportButtons";
 import { DataTable } from "@/components/shared/DataTable";
 import { useRecettes } from "@/hooks/useRecettes";
 import { useDepenses } from "@/hooks/useDepenses";
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { Loader2, ArrowUpRight, ArrowDownRight, Calendar, Filter, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,8 +17,8 @@ import { exportToPDF, exportToExcel, PDFExportSettings } from "@/lib/exportUtils
 import { formatMontant } from "@/lib/utils";
 
 export default function ListeBonsReportPage() {
-  const { recettes, isLoading: loadingRecettes, fetchAllForExport: fetchAllRecettes } = useRecettes();
-  const { depenses, isLoading: loadingDepenses, fetchAllForExport: fetchAllDepenses } = useDepenses();
+  const { recettes, isLoading: loadingRecettes, fetchAllForExport: fetchAllRecettes } = useRecettes(100000);
+  const { depenses, isLoading: loadingDepenses, fetchAllForExport: fetchAllDepenses } = useDepenses(100000);
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<"recettes" | "depenses">("recettes");
   

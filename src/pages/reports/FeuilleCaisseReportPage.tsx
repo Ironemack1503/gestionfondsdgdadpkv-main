@@ -27,6 +27,7 @@ import { exportToWord, generateTableHTML, generateSummaryHTML } from '@/lib/word
 import { useReportSettings } from '@/hooks/useReportSettings';
 import { useServices } from '@/hooks/useServices';
 import { useRubriques } from '@/hooks/useRubriques';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -38,9 +39,9 @@ const moisNoms = [
 type FilterType = 'all' | 'recettes' | 'depenses';
 
 export default function FeuilleCaisseReportPage() {
-  const currentDate = new Date();
-  const [selectedMois, setSelectedMois] = useState(currentDate.getMonth() + 1);
-  const [selectedAnnee, setSelectedAnnee] = useState(currentDate.getFullYear());
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const [selectedMois, setSelectedMois] = useState(latestMonth);
+  const [selectedAnnee, setSelectedAnnee] = useState(latestYear);
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [selectedServiceId, setSelectedServiceId] = useState<string>('all');
   const [selectedRubriqueId, setSelectedRubriqueId] = useState<string>('all');
@@ -74,14 +75,14 @@ export default function FeuilleCaisseReportPage() {
       const { data: prevRecettes } = await supabase
         .from('recettes')
         .select('montant')
-        .gte('date', startDate)
-        .lte('date', endDate);
+        .gte('date_transaction', startDate)
+        .lte('date_transaction', endDate);
 
       const { data: prevDepenses } = await supabase
         .from('depenses')
         .select('montant')
-        .gte('date', startDate)
-        .lte('date', endDate);
+        .gte('date_transaction', startDate)
+        .lte('date_transaction', endDate);
 
       const totalRecettes = (prevRecettes || []).reduce((acc, r) => acc + Number(r.montant), 0);
       const totalDepenses = (prevDepenses || []).reduce((acc, d) => acc + Number(d.montant), 0);

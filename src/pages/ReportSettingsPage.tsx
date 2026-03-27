@@ -481,8 +481,8 @@ export default function ReportSettingsPage() {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
 
   // Hooks pour les données des rapports
-  const { recettes, isLoading: isLoadingRecettes } = useRecettes();
-  const { depenses, isLoading: isLoadingDepenses } = useDepenses();
+  const { recettes, isLoading: isLoadingRecettes } = useRecettes(100000);
+  const { depenses, isLoading: isLoadingDepenses } = useDepenses(100000);
   const { programmations, isLoading: isLoadingProgrammations } = useProgrammations();
   const { data: monthlyStats, isLoading: isLoadingMonthly } = useMonthlyStats(currentYear);
 

@@ -25,6 +25,7 @@ import { exportToWord, generateTableHTML, generateSummaryHTML } from '@/lib/word
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useRubriques } from '@/hooks/useRubriques';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { sortRubriquesWithSoldeFirst } from '@/lib/rubriquesSortUtils';
 
 const moisNoms = [
@@ -36,9 +37,9 @@ type ViewMode = 'mensuel' | 'annuel';
 type DisplayMode = 'detail' | 'synthese';
 
 export default function SommaireReportPage() {
-  const currentDate = new Date();
-  const [selectedMois, setSelectedMois] = useState(currentDate.getMonth() + 1);
-  const [selectedAnnee, setSelectedAnnee] = useState(currentDate.getFullYear());
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const [selectedMois, setSelectedMois] = useState(latestMonth);
+  const [selectedAnnee, setSelectedAnnee] = useState(latestYear);
   const [viewMode, setViewMode] = useState<ViewMode>('mensuel');
   const [displayMode, setDisplayMode] = useState<DisplayMode>('detail');
   const [selectedRubrique, setSelectedRubrique] = useState<string>('all');

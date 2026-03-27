@@ -18,6 +18,7 @@ import { exportToPDF, exportToExcel, ExportColumn, PDFExportSettings, defaultPDF
 import { exportToWord, generateTableHTML, generateSummaryHTML } from '@/lib/wordExport';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -31,9 +32,9 @@ const moisNoms = [
 type ViewMode = 'cards' | 'table';
 
 export default function EtatFinancierPage() {
-  const currentDate = new Date();
-  const [selectedMois, setSelectedMois] = useState(currentDate.getMonth() + 1);
-  const [selectedAnnee, setSelectedAnnee] = useState(currentDate.getFullYear());
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const [selectedMois, setSelectedMois] = useState(latestMonth);
+  const [selectedAnnee, setSelectedAnnee] = useState(latestYear);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [showDetails, setShowDetails] = useState(true);
   
@@ -70,14 +71,14 @@ export default function EtatFinancierPage() {
       const { data: prevRecettes } = await supabase
         .from('recettes')
         .select('montant')
-        .gte('date', startDate)
-        .lte('date', endDate);
+        .gte('date_transaction', startDate)
+        .lte('date_transaction', endDate);
 
       const { data: prevDepenses } = await supabase
         .from('depenses')
         .select('montant')
-        .gte('date', startDate)
-        .lte('date', endDate);
+        .gte('date_transaction', startDate)
+        .lte('date_transaction', endDate);
 
       const totalRecettes = (prevRecettes || []).reduce((acc, r) => acc + Number(r.montant), 0);
       const totalDepenses = (prevDepenses || []).reduce((acc, d) => acc + Number(d.montant), 0);

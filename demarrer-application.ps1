@@ -26,6 +26,7 @@ if ($supabaseRunning) {
     Write-Host "  - API: http://192.168.0.32:54321" -ForegroundColor Gray
     Write-Host "  - Studio: http://127.0.0.1:54323" -ForegroundColor Gray
     Write-Host "  - PostgreSQL: 192.168.0.32:54322" -ForegroundColor Gray
+}
 else {
     Write-Host "⚠ Supabase n'est pas démarré" -ForegroundColor Red
     Write-Host "Démarrage de Supabase..." -ForegroundColor Yellow
@@ -37,7 +38,6 @@ else {
         Write-Host "✗ Erreur lors du démarrage de Supabase" -ForegroundColor Red
         Write-Host "  Essayez manuellement: npx supabase start" -ForegroundColor Gray
     }
-}
 Write-Host ""
 
 # 2. Vérifier le serveur Vite

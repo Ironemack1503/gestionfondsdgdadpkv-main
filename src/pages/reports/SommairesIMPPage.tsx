@@ -21,8 +21,7 @@ import {
 } from "@/components/ui/table";
 import { useRecettes } from "@/hooks/useRecettes";
 import { useDepenses } from "@/hooks/useDepenses";
-import { useRubriques } from "@/hooks/useRubriques";
-import { ExportButtons } from "@/components/shared/ExportButtons";
+import { useRubriques } from "@/hooks/useRubriques";import { useLatestDataDate } from '@/hooks/useLatestDataDate';import { ExportButtons } from "@/components/shared/ExportButtons";
 import { TableColumnConfig, ConfigurableColumn } from "@/components/shared/TableColumnConfig";
 import { exportToPDF, exportToExcel, PDFExportSettings, ExportColumn } from "@/lib/exportUtils";
 import { formatMontant } from "@/lib/utils";
@@ -50,13 +49,13 @@ const defaultColumns: ConfigurableColumn[] = [
 ];
 
 export default function SommairesIMPPage() {
-  const now = new Date();
-  const [selectedMois, setSelectedMois] = useState(now.getMonth() + 1);
-  const [selectedAnnee, setSelectedAnnee] = useState(now.getFullYear());
+  const { latestYear, latestMonth } = useLatestDataDate();
+  const [selectedMois, setSelectedMois] = useState(latestMonth);
+  const [selectedAnnee, setSelectedAnnee] = useState(latestYear);
   const [columns, setColumns] = useState<ConfigurableColumn[]>(defaultColumns);
 
-  const { recettes, isLoading: loadingRecettes } = useRecettes();
-  const { depenses, isLoading: loadingDepenses } = useDepenses();
+  const { recettes, isLoading: loadingRecettes } = useRecettes(100000);
+  const { depenses, isLoading: loadingDepenses } = useDepenses(100000);
   const { rubriques, isLoading: loadingRubriques } = useRubriques();
 
   const isLoading = loadingRecettes || loadingDepenses || loadingRubriques;

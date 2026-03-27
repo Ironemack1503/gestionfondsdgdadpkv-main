@@ -118,8 +118,8 @@ export interface ReportFilters {
 }
 
 export function useReportData() {
-  const { recettes, isLoading: loadingRecettes, fetchAllForExport: fetchAllRecettes } = useRecettes();
-  const { depenses, isLoading: loadingDepenses, fetchAllForExport: fetchAllDepenses } = useDepenses();
+  const { recettes, isLoading: loadingRecettes, fetchAllForExport: fetchAllRecettes } = useRecettes(100000);
+  const { depenses, isLoading: loadingDepenses, fetchAllForExport: fetchAllDepenses } = useDepenses(100000);
   const { programmations, isLoading: loadingProgrammations, getProgrammationsByMonthYear } = useProgrammations();
 
   // Calculate previous month closing balance
@@ -141,21 +141,21 @@ export function useReportData() {
     const { data: prevRecettes } = await supabase
       .from('recettes')
       .select('montant')
-      .gte('date', startDate)
-      .lte('date', endDate);
+      .gte('date_transaction', startDate)
+      .lte('date_transaction', endDate);
 
     const { data: prevDepenses } = await supabase
       .from('depenses')
       .select('montant')
-      .gte('date', startDate)
-      .lte('date', endDate);
+      .gte('date_transaction', startDate)
+      .lte('date_transaction', endDate);
 
     const totalRecettes = (prevRecettes || []).reduce((acc, r) => acc + Number(r.montant), 0);
     const totalDepenses = (prevDepenses || []).reduce((acc, d) => acc + Number(d.montant), 0);
 
     // Recursively get balance before previous month
     let previousBalance = 0;
-    if (prevAnnee >= 2024) { // Limit recursion
+    if (prevAnnee >= 2020) { // Limit recursion
       previousBalance = await calculatePreviousMonthBalance(prevMois, prevAnnee);
     }
 

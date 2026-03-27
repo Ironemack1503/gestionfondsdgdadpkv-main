@@ -114,8 +114,8 @@ export function AdvancedReportEditor() {
   );
 
   // Load data
-  const { recettes } = useRecettes();
-  const { depenses } = useDepenses();
+  const { recettes } = useRecettes(100000);
+  const { depenses } = useDepenses(100000);
   const { programmations } = useProgrammations();
   
   // Load saved templates including default
