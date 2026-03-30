@@ -1,304 +1,257 @@
 /**
  * Rapport Officiel Feuille de Caisse
- * Format conforme aux standards DGDA avec en-tête, logo et signatures
+ * Format conforme au Crystal Report MVTCAISSEF — police Courier New 10pt
+ * Structure : En-tête colonnes → Groupe par Date_Mvt_A → Pied de page (Total/Encaisse/Balance)
  */
 
 import { useMemo } from 'react';
 import { formatMontant } from '@/lib/utils';
-import dgdaLogo from '@/assets/dgda-logo-new.jpg';
 import { useOfficialReportsConfig, OfficialReportConfig } from '@/hooks/useOfficialReportsConfig';
+import { OfficialReportLayout, OfficialReportPrintWrapper } from './OfficialReportLayout';
 
-interface FeuilleCaisseItem {
+export interface FeuilleCaisseItem {
   date: string;
   numeroOrdre: number;
   numeroBEO: string;
   libelle: string;
-  recette?: number;
-  depense?: number;
+  recette: number;
+  depense: number;
   imp?: string;
 }
 
-interface FeuilleCaisseOfficielReportProps {
+export interface FeuilleCaisseOfficielReportProps {
   data: FeuilleCaisseItem[];
   mois: string;
   annee: number;
+  dateFeuille: string;
+  nomComptable: string;
   soldeInitial?: number;
   reference?: string;
   totalEnLettres?: string;
-  comptable?: string;
-  directeurProvincial?: string;
-  config?: OfficialReportConfig; // Config optionnelle pour aperçu en temps réel
+  config?: OfficialReportConfig;
 }
+
+/** Grouper les lignes par date (Groupe n°1 : MVTCAISSEF.Date_Mvt_A) */
+function groupByDate(data: FeuilleCaisseItem[]): Map<string, FeuilleCaisseItem[]> {
+  const groups = new Map<string, FeuilleCaisseItem[]>();
+  data.forEach(item => {
+    const key = item.date;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(item);
+  });
+  return groups;
+}
+
+const courierStyle = "font-family: 'Courier New', Courier, monospace; font-size: 10pt;";
+const cellBorder = "border: 1px solid #000; padding: 2px 4px;";
 
 export function FeuilleCaisseOfficielReport({
   data,
   mois,
   annee,
+  dateFeuille,
+  nomComptable,
   soldeInitial = 0,
   reference,
   totalEnLettres,
-  comptable,
-  directeurProvincial,
-  config: configProp
+  config: configProp,
 }: FeuilleCaisseOfficielReportProps) {
-  
-  // Charger la configuration depuis le hook ou utiliser celle fournie en prop
   const { getConfig } = useOfficialReportsConfig();
   const config = configProp || getConfig('feuilleCaisse');
-  
-  // Calculer les totaux
+
+  const groupedData = useMemo(() => groupByDate(data), [data]);
+
   const totaux = useMemo(() => {
     const totalRecettes = data.reduce((acc, item) => acc + (item.recette || 0), 0);
     const totalDepenses = data.reduce((acc, item) => acc + (item.depense || 0), 0);
-    const balance = totalRecettes - totalDepenses;
-    
-    return {
-      recettes: totalRecettes,
-      depenses: totalDepenses,
-      encaisse: totalRecettes,
-      balance: balance
-    };
-  }, [data]);
+    const solde = totalRecettes - totalDepenses;
+    const balance = soldeInitial + solde;
+    return { recettes: totalRecettes, depenses: totalDepenses, solde, balance };
+  }, [data, soldeInitial]);
 
-  const currentDate = new Date();
-  const dateFormatted = `Fait à Kinshasa, le ${currentDate.getDate().toString().padStart(2, '0')}/${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getFullYear()}`;
-
-  // Utiliser les valeurs de configuration ou les props comme fallback
   const finalReference = reference || `${config.referencePrefix}${annee}`;
-  const finalComptable = comptable || config.signatureName1;
-  const finalDirecteurProvincial = directeurProvincial || config.signatureName2;
-  
-  // Remplacer les variables dans le titre
-  const titre = config.titleTemplate
-    .replace('{MOIS}', mois.toUpperCase())
-    .replace('{ANNEE}', annee.toString());
+  const titre = `FEUILLE DE CAISSE — MOIS DE ${mois.toUpperCase()} ${annee}`;
 
-  // Colonnes visibles triées par ordre
-  const visibleColumns = (config.columns || [])
-    .filter(col => col.visible)
-    .sort((a, b) => a.order - b.order);
+  const signatures = [
+    { title: 'COMPTABLE PROVINCIALE DES DEPENSES', name: nomComptable },
+  ];
 
   return (
-    <div 
-      className="bg-white text-black p-8 max-w-[210mm] mx-auto"
-      style={{ fontFamily: config.bodyFont }}
+    <OfficialReportLayout
+      config={config}
+      titre={titre}
+      reference={finalReference}
+      totalEnLettres={totalEnLettres}
+      signatures={signatures}
     >
-      {/* En-tête officiel */}
-      <div className="text-center mb-6">
-        <div className="text-[10pt] leading-[1.4]">
-          <p className="font-semibold">{config.headerLine1}</p>
-          <p className="font-semibold">{config.headerLine2}</p>
-          <p className="font-semibold">{config.headerLine3}</p>
-          <p className="font-bold">D.G.D.A</p>
-          {config.headerLine4 && <p className="font-semibold">{config.headerLine4}</p>}
-        </div>
-        
-        {/* Logo DGDA */}
-        {config.showLogo && (
-          <div className="flex justify-center my-4">
-            <img 
-              src={dgdaLogo} 
-              alt="Logo DGDA" 
-              className="object-contain"
-              width={config.logoSize}
-              height={config.logoSize}
-            />
-          </div>
-        )}
-        
-        <div className="text-[10pt] font-bold underline mt-2">
-          BUREAU COMPTABLE
-        </div>
-      </div>
-
-      {/* Titre du rapport */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 
-          className="font-bold"
-          style={{
-            fontFamily: config.titleFont,
-            fontSize: `${config.titleSize}pt`,
-            color: config.headerColor
-          }}
-        >
-          FEUILLE DE CAISSE
-        </h1>
-        <h2 
-          className="font-bold"
-          style={{
-            fontFamily: config.titleFont,
-            fontSize: `${config.titleSize}pt`,
-            color: config.headerColor
-          }}
-        >
-          MOIS DE {mois.toUpperCase()} {annee}
-        </h2>
-      </div>
-
-      {/* Tableau des données */}
-      <table className="w-full border-collapse mb-4" style={{ fontSize: `${config.textSize - 2}pt` }}>
+      {/* === TABLEAU FEUILLE DE CAISSE === */}
+      <table
+        className="w-full border-collapse mb-4"
+        style={{ fontFamily: "'Courier New', Courier, monospace", fontSize: '10pt' }}
+      >
+        {/* 1. En-tête du tableau */}
         <thead>
-          <tr style={{ backgroundColor: config.alternateRowColor }}>
-            <th className="p-1 text-center font-bold w-[60px]" style={{ border: `1px solid ${config.borderColor}` }}>
-              Date
-            </th>
-            <th className="p-1 text-center font-bold w-[35px]" style={{ border: `1px solid ${config.borderColor}` }}>
-              N°ord
-            </th>
-            <th className="p-1 text-center font-bold w-[45px]" style={{ border: `1px solid ${config.borderColor}` }}>
-              N°BEO
-            </th>
-            <th className="p-1 text-left font-bold" style={{ border: `1px solid ${config.borderColor}` }}>
-              LIBELLE
-            </th>
-            <th className="p-1 text-center font-bold" colSpan={3} style={{ border: `1px solid ${config.borderColor}` }}>
-              MONTANT
-            </th>
+          <tr style={{ backgroundColor: '#e5e7eb' }}>
+            <th style={{ ...parseStyle(cellBorder), width: '70px', textAlign: 'center' }}>Date</th>
+            <th style={{ ...parseStyle(cellBorder), width: '50px', textAlign: 'center' }}>N°ORD</th>
+            <th style={{ ...parseStyle(cellBorder), width: '65px', textAlign: 'center' }}>N°BEO</th>
+            <th style={{ ...parseStyle(cellBorder), textAlign: 'left' }}>LIBELLE</th>
+            <th style={{ ...parseStyle(cellBorder), textAlign: 'center' }} colSpan={3}>MONTANT</th>
           </tr>
-          <tr style={{ backgroundColor: config.alternateRowColor }}>
-            <th className="p-1" colSpan={4} style={{ border: `1px solid ${config.borderColor}` }}></th>
-            <th className="p-1 text-center font-bold w-[90px]" style={{ border: `1px solid ${config.borderColor}` }}>
-              RECETTE
-            </th>
-            <th className="p-1 text-center font-bold w-[90px]" style={{ border: `1px solid ${config.borderColor}` }}>
-              DEPENSE
-            </th>
-            <th className="p-1 text-center font-bold w-[60px]" style={{ border: `1px solid ${config.borderColor}` }}>
-              IMP
-            </th>
+          <tr style={{ backgroundColor: '#e5e7eb' }}>
+            <th style={{ ...parseStyle(cellBorder) }} colSpan={4}></th>
+            <th style={{ ...parseStyle(cellBorder), width: '100px', textAlign: 'center' }}>RECETTE</th>
+            <th style={{ ...parseStyle(cellBorder), width: '100px', textAlign: 'center' }}>DEPENSE</th>
+            <th style={{ ...parseStyle(cellBorder), width: '50px', textAlign: 'center' }}>IMP</th>
           </tr>
         </thead>
+
         <tbody>
-          {data.map((item, index) => (
-            <tr 
-              key={index} 
-              style={{ 
-                backgroundColor: index % 2 === 1 ? config.alternateRowColor : 'transparent' 
-              }}
-            >
-              <td className="p-1 text-center text-[7pt]" style={{ border: `1px solid ${config.borderColor}` }}>
-                {item.date}
-              </td>
-              <td className="p-1 text-center font-bold" style={{ border: `1px solid ${config.borderColor}` }}>
-                {item.numeroOrdre}
-              </td>
-              <td className="p-1 text-center" style={{ border: `1px solid ${config.borderColor}` }}>
-                {item.numeroBEO}
-              </td>
-              <td className="p-1 text-[7pt]" style={{ border: `1px solid ${config.borderColor}` }}>
-                {item.libelle}
-              </td>
-              <td className="p-1 text-right font-mono" style={{ border: `1px solid ${config.borderColor}` }}>
-                {item.recette ? formatMontant(item.recette) : ''}
-              </td>
-              <td className="p-1 text-right font-mono" style={{ border: `1px solid ${config.borderColor}` }}>
-                {item.depense ? formatMontant(item.depense) : ''}
-              </td>
-              <td className="p-1 text-center text-[7pt]" style={{ border: `1px solid ${config.borderColor}` }}>
-                {item.imp || ''}
-              </td>
-            </tr>
-          ))}
+          {/* 2. Groupes par date (MVTCAISSEF.Date_Mvt_A) */}
+          {Array.from(groupedData.entries()).map(([dateKey, rows]) => {
+            const groupRecettes = rows.reduce((s, r) => s + (r.recette || 0), 0);
+            const groupDepenses = rows.reduce((s, r) => s + (r.depense || 0), 0);
+
+            return (
+              <GroupeDate
+                key={dateKey}
+                dateKey={dateKey}
+                rows={rows}
+                groupRecettes={groupRecettes}
+                groupDepenses={groupDepenses}
+              />
+            );
+          })}
         </tbody>
+
+        {/* 5. Pied de page du tableau */}
         <tfoot>
-          <tr className="font-bold" style={{ backgroundColor: config.alternateRowColor }}>
-            <td colSpan={4} className="p-2 text-right" style={{ border: `1px solid ${config.borderColor}` }}>
-              TOTAL
-            </td>
-            <td className="p-2 text-right font-mono" style={{ border: `1px solid ${config.borderColor}` }}>
-              {formatMontant(totaux.recettes)}
-            </td>
-            <td className="p-2 text-right font-mono" style={{ border: `1px solid ${config.borderColor}` }}>
-              {formatMontant(totaux.depenses)}
-            </td>
-            <td className="p-2" style={{ border: `1px solid ${config.borderColor}` }}></td>
+          {/* Total */}
+          <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 'bold' }}>
+            <td style={{ ...parseStyle(cellBorder), textAlign: 'right' }} colSpan={4}>TOTAL</td>
+            <td style={{ ...parseStyle(cellBorder), textAlign: 'right' }}>{formatMontant(totaux.recettes)}</td>
+            <td style={{ ...parseStyle(cellBorder), textAlign: 'right' }}>{formatMontant(totaux.depenses)}</td>
+            <td style={{ ...parseStyle(cellBorder) }}></td>
           </tr>
-          <tr className="font-bold" style={{ backgroundColor: config.alternateRowColor }}>
-            <td colSpan={4} className="p-2 text-right" style={{ border: `1px solid ${config.borderColor}` }}>
-              ENCAISSE:
-            </td>
-            <td className="p-2 text-right font-mono" style={{ border: `1px solid ${config.borderColor}` }}>
-              {formatMontant(totaux.encaisse)}
-            </td>
-            <td className="p-2 text-right font-mono" style={{ border: `1px solid ${config.borderColor}` }}>
-              {formatMontant(totaux.depenses)}
-            </td>
-            <td className="p-2" style={{ border: `1px solid ${config.borderColor}` }}></td>
+          {/* Encaisse (solde = recettes - dépenses) */}
+          <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 'bold' }}>
+            <td style={{ ...parseStyle(cellBorder), textAlign: 'right' }} colSpan={4}>ENCAISSE :</td>
+            <td style={{ ...parseStyle(cellBorder), textAlign: 'right' }} colSpan={2}>{formatMontant(totaux.solde)}</td>
+            <td style={{ ...parseStyle(cellBorder) }}></td>
           </tr>
-          <tr className="font-bold" style={{ backgroundColor: config.alternateRowColor }}>
-            <td colSpan={4} className="p-2 text-right" style={{ border: `1px solid ${config.borderColor}` }}>
-              BALANCE:
-            </td>
-            <td className="p-2 text-right font-mono" colSpan={2} style={{ border: `1px solid ${config.borderColor}` }}>
-              {formatMontant(totaux.balance)}
-            </td>
-            <td className="p-2" style={{ border: `1px solid ${config.borderColor}` }}></td>
+          {/* Balance (solde initial + solde courant) */}
+          <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 'bold' }}>
+            <td style={{ ...parseStyle(cellBorder), textAlign: 'right' }} colSpan={4}>BALANCE :</td>
+            <td style={{ ...parseStyle(cellBorder), textAlign: 'right' }} colSpan={2}>{formatMontant(totaux.balance)}</td>
+            <td style={{ ...parseStyle(cellBorder) }}></td>
           </tr>
         </tfoot>
       </table>
 
-      {/* Montant en lettres */}
+      {/* Nous disons */}
       {totalEnLettres && (
-        <div className="mb-6 text-[9pt] italic">
-          <p>
-            <span className="font-semibold">Nous disons:</span> {totalEnLettres}
-          </p>
+        <div style={{ fontFamily: "'Courier New', Courier, monospace", fontSize: '10pt', marginTop: '8px' }}>
+          <span style={{ fontWeight: 'bold', fontStyle: 'italic' }}>Nous disons : </span>
+          <span style={{ fontStyle: 'italic' }}>{totalEnLettres}</span>
         </div>
       )}
 
-      {/* Date et lieu */}
-      <div className="text-right mb-8 text-[10pt]">
-        <p className="italic">{dateFormatted}</p>
+      {/* Date de la feuille de caisse */}
+      <div style={{ textAlign: 'right', marginTop: '16px', fontFamily: "'Courier New', Courier, monospace", fontSize: '10pt' }}>
+        Fait à Kinshasa, le {dateFeuille}
       </div>
 
-      {/* Signatures */}
-      <div className="grid grid-cols-2 gap-8 mb-8 text-[9pt]">
-        <div className="text-center">
-          <p className="font-bold mb-16">{config.signatureTitle1.toUpperCase()}</p>
-          <div className="mt-12">
-            <p className="font-bold underline">{finalComptable}</p>
-          </div>
-        </div>
-        <div className="text-center">
-          <p className="font-bold mb-16">{config.signatureTitle2.toUpperCase()}</p>
-          <div className="mt-12">
-            <p className="font-bold underline">{finalDirecteurProvincial}</p>
-          </div>
-        </div>
+      {/* Signature : COMPTABLE PROVINCIALE DES DEPENSES + Nom */}
+      <div style={{ textAlign: 'right', marginTop: '24px', fontFamily: "'Courier New', Courier, monospace", fontSize: '10pt' }}>
+        <p style={{ fontWeight: 'bold', letterSpacing: '0.05em' }}>COMPTABLE PROVINCIALE DES DEPENSES</p>
+        <p style={{ marginTop: '40px', fontWeight: 'bold', textDecoration: 'underline' }}>{nomComptable}</p>
       </div>
-
-      {/* Pied de page */}
-      <div className="border-t-2 border-gray-400 pt-4 mt-8 text-[7pt]">
-        <div className="text-center italic">
-          {config.footerLine1 && <p className="font-semibold mb-1">{config.footerLine1}</p>}
-          {config.footerLine2 && <p>{config.footerLine2}</p>}
-          {config.footerLine3 && <p>{config.footerLine3}</p>}
-          {config.footerLine4 && <p>{config.footerLine4}</p>}
-        </div>
-      </div>
-    </div>
+    </OfficialReportLayout>
   );
 }
 
-// Export version for print/PDF
+/** Composant interne : Groupe par date (n°1) */
+function GroupeDate({
+  dateKey,
+  rows,
+  groupRecettes,
+  groupDepenses,
+}: {
+  dateKey: string;
+  rows: FeuilleCaisseItem[];
+  groupRecettes: number;
+  groupDepenses: number;
+}) {
+  const dateFormatted = new Date(dateKey).toLocaleDateString('fr-FR');
+
+  return (
+    <>
+      {/* En-tête du groupe n°1 : date */}
+      <tr style={{ backgroundColor: '#f3f4f6' }}>
+        <td
+          style={{ ...parseStyle(cellBorder), fontWeight: 'bold', textAlign: 'center' }}
+          colSpan={7}
+        >
+          {dateFormatted}
+        </td>
+      </tr>
+
+      {/* Lignes de données du groupe */}
+      {rows.map((item, idx) => (
+        <tr key={`${dateKey}-${idx}`}>
+          <td style={{ ...parseStyle(cellBorder), textAlign: 'center' }}>{dateFormatted}</td>
+          <td style={{ ...parseStyle(cellBorder), textAlign: 'center' }}>{item.numeroOrdre}</td>
+          <td style={{ ...parseStyle(cellBorder), textAlign: 'center' }}>{item.numeroBEO}</td>
+          <td style={{ ...parseStyle(cellBorder) }}>{item.libelle}</td>
+          <td style={{ ...parseStyle(cellBorder), textAlign: 'right' }}>
+            {item.recette ? formatMontant(item.recette) : ''}
+          </td>
+          <td style={{ ...parseStyle(cellBorder), textAlign: 'right' }}>
+            {item.depense ? formatMontant(item.depense) : ''}
+          </td>
+          <td style={{ ...parseStyle(cellBorder), textAlign: 'center' }}>{item.imp || ''}</td>
+        </tr>
+      ))}
+
+      {/* Pied de page du groupe n°1a : sous-total recettes */}
+      <tr style={{ backgroundColor: '#f9fafb', fontStyle: 'italic' }}>
+        <td style={{ ...parseStyle(cellBorder) }} colSpan={4} />
+        <td style={{ ...parseStyle(cellBorder), textAlign: 'right', fontWeight: 'bold' }}>
+          {groupRecettes > 0 ? formatMontant(groupRecettes) : ''}
+        </td>
+        <td style={{ ...parseStyle(cellBorder) }} />
+        <td style={{ ...parseStyle(cellBorder) }} />
+      </tr>
+      {/* Pied de page du groupe n°1b : sous-total dépenses */}
+      <tr style={{ backgroundColor: '#f9fafb', fontStyle: 'italic' }}>
+        <td style={{ ...parseStyle(cellBorder) }} colSpan={4} />
+        <td style={{ ...parseStyle(cellBorder) }} />
+        <td style={{ ...parseStyle(cellBorder), textAlign: 'right', fontWeight: 'bold' }}>
+          {groupDepenses > 0 ? formatMontant(groupDepenses) : ''}
+        </td>
+        <td style={{ ...parseStyle(cellBorder) }} />
+      </tr>
+    </>
+  );
+}
+
+/** Helper : convertit une string CSS inline en objet React */
+function parseStyle(css: string): React.CSSProperties {
+  const style: Record<string, string> = {};
+  css.split(';').forEach(rule => {
+    const [key, value] = rule.split(':').map(s => s.trim());
+    if (key && value) {
+      const camelKey = key.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+      style[camelKey] = value;
+    }
+  });
+  return style as React.CSSProperties;
+}
+
 export function FeuilleCaisseOfficielReportPrint(props: FeuilleCaisseOfficielReportProps) {
   return (
-    <div className="print-only">
-      <style>
-        {`
-          @media print {
-            @page {
-              size: A4;
-              margin: 1cm;
-            }
-            body {
-              print-color-adjust: exact;
-              -webkit-print-color-adjust: exact;
-            }
-          }
-        `}
-      </style>
+    <OfficialReportPrintWrapper>
       <FeuilleCaisseOfficielReport {...props} />
-    </div>
+    </OfficialReportPrintWrapper>
   );
 }

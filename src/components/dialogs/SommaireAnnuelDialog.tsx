@@ -97,16 +97,32 @@ export function SommaireAnnuelDialog({
   const handleExportPDF = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
+    let yPos = 12;
 
-    // Header
-    doc.setFontSize(14);
+    // En-tête officiel centré
+    doc.setFont('times', 'italic');
+    doc.setFontSize(11);
+    doc.text('République Démocratique du Congo', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    doc.text('Ministère des Finances', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    doc.text('Direction Générale des Douanes et Accises', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
     doc.setFont('times', 'bold');
-    doc.text(`SOMMAIRE ANNUEL DES ${typeLabel.toUpperCase()} - ${selectedAnnee}`, pageWidth / 2, 20, { align: 'center' });
-    
-    doc.setFontSize(10);
-    doc.setFont('times', 'normal');
-    doc.text('DIRECTION GENERALE DES DOUANES ET ACCISES', pageWidth / 2, 28, { align: 'center' });
-    doc.text('Direction Provinciale Kinshasa-Ville', pageWidth / 2, 34, { align: 'center' });
+    doc.text('D.G.D.A', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    doc.setFont('times', 'italic');
+    doc.text('Direction Provinciale de Kin Ville', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 10;
+
+    // Titre souligné
+    const titleText = `SOMMAIRE ANNUEL DES ${typeLabel.toUpperCase()} - ${selectedAnnee}`;
+    doc.setFont('times', 'bold');
+    doc.setFontSize(14);
+    const titleWidth = doc.getTextWidth(titleText);
+    doc.text(titleText, pageWidth / 2, yPos, { align: 'center' });
+    doc.line((pageWidth - titleWidth) / 2, yPos + 1, (pageWidth + titleWidth) / 2, yPos + 1);
+    yPos += 10;
 
     // Table
     const tableData = dataWithPercentage.map((item, idx) => [
@@ -121,14 +137,14 @@ export function SommaireAnnuelDialog({
       head: [['N°', 'Code', 'Libellé', 'Montant', '%']],
       body: tableData,
       foot: [['', '', 'TOTAL', formatMontant(total) + ' FC', '100%']],
-      startY: 42,
+      startY: yPos,
       theme: 'grid',
       styles: {
         font: 'times',
         fontSize: 9,
       },
       headStyles: {
-        fillColor: [41, 98, 255],
+        fillColor: [30, 64, 175],
         textColor: [255, 255, 255],
         fontStyle: 'bold',
       },

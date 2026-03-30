@@ -22,6 +22,7 @@ import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useDepenses } from '@/hooks/useDepenses';
 import { formatMontant } from '@/lib/utils';
 import { exportToPDF, exportToExcel, PDFExportSettings } from '@/lib/exportUtils';
+import { exportToWord, generateTableHTML } from '@/lib/wordExport';
 
 interface ComparativeRow {
   date: string;
@@ -199,6 +200,20 @@ export default function ApprovisionnementReportPage() {
     });
   };
 
+  const handleExportWord = () => {
+    const data = viewMode === 'journalier' ? dailyData : rubriqueData;
+    const columns = getExportColumns();
+    const tableHTML = generateTableHTML(
+      columns.map(c => ({ header: c.header, key: c.key, type: c.type })),
+      data
+    );
+    exportToWord({
+      title: `Rapport Approvisionnement - ${viewMode === 'journalier' ? 'Vue Journalière' : 'Par Rubrique'}`,
+      filename: `rapport_approvisionnement_${format(new Date(), 'yyyyMMdd')}`,
+      content: tableHTML,
+    });
+  };
+
   const isLoading = loadingRecettes || loadingDepenses;
 
   return (
@@ -210,6 +225,7 @@ export default function ApprovisionnementReportPage() {
           <ExportButtons
             onExportPDF={handleExportPDF}
             onExportExcel={handleExportExcel}
+            onExportWord={handleExportWord}
             disabled={isLoading}
             previewTitle={`Rapport Approvisionnement - ${viewMode}`}
             previewSubtitle={`Période: du ${format(new Date(dateDebut), 'dd/MM/yyyy')} au ${format(new Date(dateFin), 'dd/MM/yyyy')}`}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -104,24 +104,6 @@ const menuItems: MenuItem[] = [
     title: "Programmation Mensuelle",
     icon: Calendar,
     path: "/programmation",
-    section: "Programmation",
-  },
-  {
-    title: "Feuille de Caisse",
-    icon: FileSpreadsheet,
-    path: "/rapports/feuille-caisse",
-    section: "Programmation",
-  },
-  {
-    title: "Sommaire Mensuel",
-    icon: FileBarChart,
-    path: "/rapports/sommaire",
-    section: "Programmation",
-  },
-  {
-    title: "Rapport Programmation",
-    icon: FileText,
-    path: "/rapports/programmation",
     section: "Programmation",
   },
   
@@ -259,10 +241,26 @@ export function AppSidebar() {
     }
   }, [activeSection]);
 
-  // Close mobile menu on route change
+  // Ref for the nav scroll container
+  const navRef = useRef<HTMLElement>(null);
+
+  // Scroll the active menu item into view
+  const scrollToActive = useCallback(() => {
+    requestAnimationFrame(() => {
+      const nav = navRef.current;
+      if (!nav) return;
+      const activeEl = nav.querySelector('[data-active="true"]') as HTMLElement;
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }, []);
+
+  // Close mobile menu on route change & scroll to active item
   useEffect(() => {
     setIsMobileOpen(false);
-  }, [location.pathname]);
+    scrollToActive();
+  }, [location.pathname, scrollToActive]);
 
   // Close mobile menu on escape key
   useEffect(() => {
@@ -341,11 +339,15 @@ export function AppSidebar() {
       </div>
 
       {/* Navigation with Accordion */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto scroll-container">
+      <nav ref={navRef} className="flex-1 px-3 py-4 overflow-y-auto scroll-smooth scrollbar-thin scrollbar-thumb-sidebar-border/50 scrollbar-track-transparent">
         <Accordion 
           type="multiple" 
           value={openSections}
-          onValueChange={setOpenSections}
+          onValueChange={(values) => {
+            setOpenSections(values);
+            // Scroll to active item after accordion animation
+            setTimeout(scrollToActive, 300);
+          }}
           className="space-y-2"
         >
           {Object.entries(groupedMenuItems).map(([section, items]) => {
@@ -388,6 +390,7 @@ export function AppSidebar() {
                       <NavLink
                         key={item.title}
                         to={item.path}
+                        data-active={isActive(item.path) ? "true" : undefined}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2 rounded-lg text-sm",
                           "transition-all duration-200",

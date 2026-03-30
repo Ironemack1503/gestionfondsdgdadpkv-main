@@ -47,6 +47,7 @@ import { printBonRecette, downloadBonRecette } from "@/lib/printBon";
 import { useToast } from "@/hooks/use-toast";
 import { useLocalUserRole } from "@/hooks/useLocalUserRole";
 import { exportToPDF, exportToExcel, getRecettesExportConfig, PDFExportSettings } from "@/lib/exportUtils";
+import { exportToWord, generateTableHTML } from "@/lib/wordExport";
 import { CreateRecetteDialog, EditRecetteDialog, ViewTransactionDialog } from "@/components/dialogs";
 
 export default function RecettesPage() {
@@ -148,6 +149,21 @@ export default function RecettesPage() {
       const allData = await fetchAllForExport();
       const config = getRecettesExportConfig(allData);
       exportToExcel({ ...config, pdfSettings: settings });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportWord = async () => {
+    setIsExporting(true);
+    try {
+      const allData = await fetchAllForExport();
+      const config = getRecettesExportConfig(allData);
+      const tableHTML = generateTableHTML(
+        config.columns.map(c => ({ header: c.header, key: c.key, type: c.type })),
+        config.data
+      );
+      exportToWord({ title: config.title, filename: config.filename, content: tableHTML });
     } finally {
       setIsExporting(false);
     }
@@ -379,6 +395,7 @@ export default function RecettesPage() {
               <ExportButtons
                 onExportPDF={handleExportPDF}
                 onExportExcel={handleExportExcel}
+                onExportWord={handleExportWord}
                 disabled={totalCount === 0 || isExporting}
                 previewTitle="Liste des Recettes"
                 previewSubtitle={dateFilter !== "all" ? `Filtre: ${dateFilter}` : undefined}

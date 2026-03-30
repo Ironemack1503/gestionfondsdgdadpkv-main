@@ -31,6 +31,7 @@ import { useRecettes } from "@/hooks/useRecettes";
 import { useDepenses } from "@/hooks/useDepenses";
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { exportToPDF, exportToExcel, getFeuilleCaisseExportConfig, PDFExportSettings } from "@/lib/exportUtils";
+import { exportToWord, generateTableHTML } from "@/lib/wordExport";
 import { sortOperationsWithSoldeFirst } from "@/lib/rubriquesSortUtils";
 
 interface Operation {
@@ -193,6 +194,21 @@ export default function FeuilleCaissePage() {
                     dateDebut
                   );
                   exportToExcel({ ...config, pdfSettings: settings });
+                }}
+                onExportWord={() => {
+                  const filteredRecettes = (recettes || []).filter(r => (r.date || r.date_transaction) >= dateDebut && (r.date || r.date_transaction) <= dateFin);
+                  const filteredDepenses = (depenses || []).filter(d => (d.date || d.date_transaction) >= dateDebut && (d.date || d.date_transaction) <= dateFin);
+                  const config = getFeuilleCaisseExportConfig(
+                    filteredRecettes,
+                    filteredDepenses.map(d => ({ ...d, rubrique_libelle: d.rubrique?.libelle || 'N/A' })),
+                    { soldeInitial: 0, totalRecettes, totalDepenses, soldeFinal: soldeActuel },
+                    dateDebut
+                  );
+                  const tableHTML = generateTableHTML(
+                    config.columns.map(c => ({ header: c.header, key: c.key, type: c.type })),
+                    config.data
+                  );
+                  exportToWord({ title: config.title, filename: config.filename, content: tableHTML });
                 }}
                 disabled={operations.length === 0}
                 previewTitle="Feuille de Caisse"

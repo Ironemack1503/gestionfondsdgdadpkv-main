@@ -75,7 +75,7 @@ const DEFAULT_CONFIG: OfficialReportConfig = {
   headerLine4: 'Province du Kongo Central',
   
   showLogo: true,
-  logoSize: 96,
+  logoSize: 120,
   
   referencePrefix: 'DGDA/1400/DP/KV/SDAF/',
   

@@ -21,15 +21,15 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useReportData, numberToFrenchWords } from '@/hooks/useReportData';
-import { useAdvancedExport } from '@/hooks/useAdvancedExport';
-import { exportToPDF, exportToExcel, ExportColumn } from '@/lib/exportUtils';
+import { exportToPDF, exportToExcel, ExportColumn, exportFeuilleCaissePDF } from '@/lib/exportUtils';
 import { exportToWord, generateTableHTML, generateSummaryHTML } from '@/lib/wordExport';
-import { useReportSettings } from '@/hooks/useReportSettings';
 import { useServices } from '@/hooks/useServices';
 import { useRubriques } from '@/hooks/useRubriques';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { FeuilleCaisseExportDialog, FeuilleCaisseExportParams } from '@/components/dialogs/FeuilleCaisseExportDialog';
+import type { FeuilleCaisseItem } from '@/components/reports/FeuilleCaisseOfficielReport';
 
 const moisNoms = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -47,8 +47,8 @@ export default function FeuilleCaisseReportPage() {
   const [selectedRubriqueId, setSelectedRubriqueId] = useState<string>('all');
   const [groupByRubrique, setGroupByRubrique] = useState(false);
   
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const { generateFeuilleCaisse, calculateEtatResultat, isLoading, recettes, depenses } = useReportData();
-  const { settings: reportSettings } = useReportSettings();
   const { services, isLoading: loadingServices } = useServices();
   const { rubriques, isLoading: loadingRubriques } = useRubriques();
 
@@ -270,7 +270,182 @@ export default function FeuilleCaisseReportPage() {
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('fr-FR');
   const getMoisAnnee = () => `${moisNoms[selectedMois - 1]} ${selectedAnnee}`;
 
-  // Export handlers
+  // === EXPORT OFFICIEL via formulaire pré-export ===
+  const handleOfficialExport = (params: FeuilleCaisseExportParams) => {
+    const moisLabel = moisNoms[params.mois - 1];
+    const reportData: FeuilleCaisseItem[] = filteredData.map(row => ({
+      date: row.date,
+      numeroOrdre: row.numeroOrdre,
+      numeroBEO: row.numeroBEO,
+      libelle: row.libelle,
+      recette: row.recette,
+      depense: row.depense,
+      imp: row.imp,
+    }));
+
+    const totalRecettes = filteredData.reduce((s, r) => s + (r.recette || 0), 0);
+    const totalDepenses = filteredData.reduce((s, r) => s + (r.depense || 0), 0);
+    const solde = totalRecettes - totalDepenses;
+    const balance = soldePrecedent + solde;
+    const totalEnLettres = `${numberToFrenchWords(Math.floor(Math.abs(balance)))} Francs Congolais`;
+
+    if (params.exportType === 'print') {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+      printWindow.document.write('<html><head><title>Feuille de Caisse</title>');
+      printWindow.document.write('<style>body{font-family:"Courier New",monospace;font-size:10pt;margin:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:2px 4px}th{background:#1e40af;color:#fff;text-align:center}.text-right{text-align:right}.grp-foot{background:#f5f5f5;font-style:italic}.total-row{background:#e5e7eb;font-weight:bold}</style>');
+      printWindow.document.write('</head><body>');
+      printWindow.document.write(buildOfficialHTML(reportData, moisLabel, params, totalRecettes, totalDepenses, solde, balance, totalEnLettres, true));
+      printWindow.document.write('</body></html>');
+      printWindow.document.close();
+      printWindow.print();
+      return;
+    }
+
+    if (params.exportType === 'word') {
+      const html = buildOfficialHTML(reportData, moisLabel, params, totalRecettes, totalDepenses, solde, balance, totalEnLettres, false);
+      exportToWord({
+        title: `FEUILLE DE CAISSE — MOIS DE ${moisLabel.toUpperCase()} ${params.annee}`,
+        filename: `feuille_caisse_${moisLabel.toLowerCase()}_${params.annee}`,
+        content: html,
+        headerLines: [
+          'République Démocratique du Congo',
+          'Ministère des Finances',
+          'Direction Générale des Douanes et Accises',
+          'D.G.D.A.',
+          'Direction Provinciale de Kinshasa',
+        ],
+      });
+      return;
+    }
+
+    // PDF export — utilise la fonction dédiée Crystal Reports
+    exportFeuilleCaissePDF({
+      data: reportData,
+      moisLabel,
+      annee: params.annee,
+      dateFeuille: params.dateFeuille,
+      nomComptable: params.nomComptable,
+      soldeInitial: soldePrecedent,
+      totalEnLettres,
+    });
+  };
+
+  /** Construit le HTML officiel Crystal Reports pour Word et impression */
+  const buildOfficialHTML = (
+    reportData: FeuilleCaisseItem[],
+    moisLabel: string,
+    params: FeuilleCaisseExportParams,
+    totalRecettes: number,
+    totalDepenses: number,
+    solde: number,
+    balance: number,
+    totalEnLettres: string,
+    includeHeader: boolean = true
+  ): string => {
+    // En-tête officiel DGDA (uniquement pour impression directe)
+    const header = includeHeader ? `
+      <div style="text-align:center;font-family:'Courier New',monospace;font-size:10pt;margin-bottom:12px">
+        <p style="font-weight:bold;font-size:12pt;letter-spacing:2px;margin:0">REPUBLIQUE DEMOCRATIQUE DU CONGO</p>
+        <p style="margin:2px 0">MINISTERE DES FINANCES</p>
+        <p style="font-weight:bold;margin:2px 0">D.G.D.A.</p>
+        <p style="margin:2px 0">DIRECTION PROVINCIALE DE KINSHASA</p>
+        <p style="font-weight:bold;margin:2px 0">BUREAU COMPTABLE</p>
+        <hr style="border:1px solid #000;margin:8px auto;width:60%" />
+        <p style="font-weight:bold;font-size:13pt;margin:8px 0;text-decoration:underline">FEUILLE DE CAISSE &mdash; MOIS DE ${moisLabel.toUpperCase()} ${params.annee}</p>
+      </div>
+    ` : '';
+
+    // Grouper par date
+    const groups = new Map<string, FeuilleCaisseItem[]>();
+    reportData.forEach(item => {
+      const key = item.date;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(item);
+    });
+
+    let rows = '';
+    groups.forEach((items, dateKey) => {
+      const dateFormatted = new Date(dateKey).toLocaleDateString('fr-FR');
+      const grpR = items.reduce((s, i) => s + (i.recette || 0), 0);
+      const grpD = items.reduce((s, i) => s + (i.depense || 0), 0);
+
+      // En-tête de groupe
+      rows += `<tr style="background:#f3f4f6"><td colspan="7" style="border:1px solid #000;padding:2px 4px;font-weight:bold;text-align:center">${dateFormatted}</td></tr>`;
+      // Données
+      items.forEach(item => {
+        rows += `<tr>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:center">${dateFormatted}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:center">${item.numeroOrdre}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:center">${item.numeroBEO}</td>
+          <td style="border:1px solid #000;padding:2px 4px">${item.libelle}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:right">${item.recette ? formatMontant(item.recette) : ''}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:right">${item.depense ? formatMontant(item.depense) : ''}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:center">${item.imp || ''}</td>
+        </tr>`;
+      });
+      // Pied de groupe a (sous-total recettes)
+      rows += `<tr style="background:#f9fafb;font-style:italic">
+        <td colspan="4" style="border:1px solid #000;padding:2px 4px"></td>
+        <td style="border:1px solid #000;padding:2px 4px;text-align:right;font-weight:bold">${grpR > 0 ? formatMontant(grpR) : ''}</td>
+        <td style="border:1px solid #000;padding:2px 4px"></td>
+        <td style="border:1px solid #000;padding:2px 4px"></td>
+      </tr>`;
+      // Pied de groupe b (sous-total dépenses)
+      rows += `<tr style="background:#f9fafb;font-style:italic">
+        <td colspan="4" style="border:1px solid #000;padding:2px 4px"></td>
+        <td style="border:1px solid #000;padding:2px 4px"></td>
+        <td style="border:1px solid #000;padding:2px 4px;text-align:right;font-weight:bold">${grpD > 0 ? formatMontant(grpD) : ''}</td>
+        <td style="border:1px solid #000;padding:2px 4px"></td>
+      </tr>`;
+    });
+
+    return `
+      ${header}
+      <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:10pt">
+        <thead>
+          <tr style="background:#1e40af;color:#fff">
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:70px">Date</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:50px">N°ORD</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:65px">N°BEO</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:left">LIBELLE</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center" colspan="3">MONTANT</th>
+          </tr>
+          <tr style="background:#1e40af;color:#fff">
+            <th style="border:1px solid #000;padding:2px 4px" colspan="4"></th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:100px">RECETTE</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:100px">DEPENSE</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:50px">IMP</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr style="background:#e5e7eb;font-weight:bold">
+            <td colspan="4" style="border:1px solid #000;padding:2px 4px;text-align:right">TOTAL</td>
+            <td style="border:1px solid #000;padding:2px 4px;text-align:right">${formatMontant(totalRecettes)}</td>
+            <td style="border:1px solid #000;padding:2px 4px;text-align:right">${formatMontant(totalDepenses)}</td>
+            <td style="border:1px solid #000;padding:2px 4px"></td>
+          </tr>
+          <tr style="background:#e5e7eb;font-weight:bold">
+            <td colspan="4" style="border:1px solid #000;padding:2px 4px;text-align:right">ENCAISSE :</td>
+            <td colspan="2" style="border:1px solid #000;padding:2px 4px;text-align:right">${formatMontant(solde)}</td>
+            <td style="border:1px solid #000;padding:2px 4px"></td>
+          </tr>
+          <tr style="background:#e5e7eb;font-weight:bold">
+            <td colspan="4" style="border:1px solid #000;padding:2px 4px;text-align:right">BALANCE :</td>
+            <td colspan="2" style="border:1px solid #000;padding:2px 4px;text-align:right">${formatMontant(balance)}</td>
+            <td style="border:1px solid #000;padding:2px 4px"></td>
+          </tr>
+        </tfoot>
+      </table>
+      <p style="margin-top:8px;font-style:italic"><b>Nous disons :</b> ${totalEnLettres}</p>
+      <p style="text-align:right;margin-top:16px">Fait à Kinshasa, le ${params.dateFeuille}</p>
+      <p style="text-align:right;margin-top:24px;font-weight:bold;letter-spacing:0.05em">COMPTABLE PROVINCIALE DES DEPENSES</p>
+      <p style="text-align:right;margin-top:40px;font-weight:bold;text-decoration:underline">${params.nomComptable}</p>
+    `;
+  };
+
+  // Export handlers (anciens — gardés pour compatibilité)
   const handleExportPDF = async () => {
     const columns: ExportColumn[] = filterType === 'all' 
       ? [
@@ -700,21 +875,13 @@ export default function FeuilleCaisseReportPage() {
         description="État détaillé des opérations de caisse avec options de filtrage avancées"
         actions={
           <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={() => window.print()}>
-              <Printer className="w-4 h-4 mr-2" />
-              Imprimer
-            </Button>
-            <Button variant="outline" onClick={handleExportPDF}>
-              <FileText className="w-4 h-4 mr-2" />
-              PDF
+            <Button onClick={() => setExportDialogOpen(true)} className="gap-2">
+              <FileText className="w-4 h-4" />
+              Exporter Rapport Officiel
             </Button>
             <Button variant="outline" onClick={handleExportExcel}>
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               Excel
-            </Button>
-            <Button variant="outline" onClick={handleExportWord}>
-              <FileDown className="w-4 h-4 mr-2" />
-              Word
             </Button>
           </div>
         }
@@ -919,6 +1086,14 @@ export default function FeuilleCaisseReportPage() {
           </Tabs>
         </CardContent>
       </Card>
+      {/* Formulaire pré-export officiel */}
+      <FeuilleCaisseExportDialog
+        open={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        onExport={handleOfficialExport}
+        defaultMois={selectedMois}
+        defaultAnnee={selectedAnnee}
+      />
     </div>
   );
 }

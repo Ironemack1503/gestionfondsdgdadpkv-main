@@ -19,14 +19,15 @@ const DEFAULT_HEADER_LINES = [
   'République Démocratique du Congo',
   'Ministère des Finances',
   'Direction Générale des Douanes et Accises',
-  'Direction Provinciale de Kinshasa-Ville',
+  'D.G.D.A',
+  'Direction Provinciale de Kin Ville',
 ];
 
 const DEFAULT_FOOTER_LINES = [
-  "Tous mobilisés pour une douane d'action et d'excellence !",
-  'Immeuble DGDA, Place LE ROYAL, Bld du 30 Juin, Kinshasa/Gombe',
-  'B.P.8248 KIN I / Tél. : +243(0) 818 968 481 - +243 (0) 821 920 215',
-  'Email : info@douane.gouv.cd ; contact@douane.gouv.cd - Web : https://www.douanes.gouv.cd',
+  'Direction Générale des Douanes et Accises',
+  'Tél: +243 81 234 5678 | Email: dgda.kv@finances.gouv.cd',
+  'Site web: www.dgda.finances.gouv.cd',
+  'Adresse: Avenue de la Douane, Kinshasa, RDC',
 ];
 
 /**
@@ -78,42 +79,35 @@ export function exportToWord({
         
         .header {
           text-align: center;
-          margin-bottom: 20px;
-          border-bottom: 2px solid #1e40af;
-          padding-bottom: 15px;
+          margin-bottom: 10px;
+          padding-bottom: 10px;
         }
         
         .header-line {
-          margin: 3px 0;
-        }
-        
-        .header-line-1 {
-          font-size: 12pt;
+          margin: 2px 0;
           font-style: italic;
-        }
-        
-        .header-line-2 {
           font-size: 11pt;
-          font-weight: bold;
-        }
-        
-        .header-line-3 {
-          font-size: 11pt;
-          font-weight: bold;
         }
         
         .header-line-4 {
-          font-size: 12pt;
           font-weight: bold;
-          font-style: italic;
+          font-style: normal;
+        }
+        
+        .bureau-comptable {
+          text-align: center;
+          font-weight: bold;
+          text-decoration: underline;
+          font-size: 11pt;
+          margin: 15px 0;
         }
         
         .title {
-          font-size: 16pt;
+          font-size: 14pt;
           font-weight: bold;
           text-align: center;
-          margin: 25px 0 15px 0;
-          text-transform: uppercase;
+          margin: 20px 0 15px 0;
+          text-decoration: underline;
         }
         
         .subtitle {
@@ -137,17 +131,17 @@ export function exportToWord({
         }
         
         th {
-          background-color: #3b82f6;
+          background-color: #1e40af;
           color: #ffffff;
           font-weight: bold;
-          padding: 8px 10px;
-          border: 1px solid #1e40af;
+          padding: 6px 8px;
+          border: 1px solid #000000;
           text-align: left;
         }
         
         td {
-          padding: 6px 10px;
-          border: 1px solid #d1d5db;
+          padding: 5px 8px;
+          border: 1px solid #000000;
         }
         
         tr:nth-child(even) {
@@ -181,11 +175,12 @@ export function exportToWord({
         
         .footer {
           margin-top: 30px;
-          padding-top: 15px;
-          border-top: 1px solid #d1d5db;
+          padding-top: 10px;
+          border-top: 1px solid #999999;
           text-align: center;
-          font-size: 9pt;
-          color: #666666;
+          font-size: 8pt;
+          color: #888888;
+          font-style: italic;
         }
         
         .footer-line {
@@ -222,7 +217,7 @@ export function exportToWord({
           margin: 15px 0;
           padding: 10px;
           background-color: #f9fafb;
-          border-left: 3px solid #3b82f6;
+          border-left: 3px solid #1e40af;
         }
 
         .summary-card {
@@ -250,13 +245,10 @@ export function exportToWord({
         ${headerLines.map((line, i) => `<div class="header-line header-line-${i + 1}">${line}</div>`).join('')}
       </div>
       
+      <div class="bureau-comptable">BUREAU COMPTABLE</div>
+      
       <!-- Title -->
       <div class="title">${title}</div>
-      
-      <!-- Date -->
-      <div class="date-line">
-        Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
-      </div>
       
       <!-- Main Content -->
       ${content}

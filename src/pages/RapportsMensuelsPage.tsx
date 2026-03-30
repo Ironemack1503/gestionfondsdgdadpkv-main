@@ -8,6 +8,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { Loader2, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import { StatCard } from '@/components/shared/StatCard';
 import { exportToPDF, exportToExcel, getRapportMensuelExportConfig, PDFExportSettings } from '@/lib/exportUtils';
+import { exportToWord, generateTableHTML } from '@/lib/wordExport';
 import { formatMontant } from '@/lib/utils';
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
@@ -54,6 +55,17 @@ export default function RapportsMensuelsPage() {
     }
   };
 
+  const handleExportWord = () => {
+    if (monthlyStats) {
+      const config = getRapportMensuelExportConfig(monthlyStats, selectedYear);
+      const tableHTML = generateTableHTML(
+        config.columns.map(c => ({ header: c.header, key: c.key, type: c.type })),
+        config.data
+      );
+      exportToWord({ title: config.title, filename: config.filename, content: tableHTML });
+    }
+  };
+
   if (isLoadingMonthly) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -71,6 +83,7 @@ export default function RapportsMensuelsPage() {
           <ExportButtons
             onExportPDF={handleExportPDF}
             onExportExcel={handleExportExcel}
+            onExportWord={handleExportWord}
             disabled={!monthlyStats || monthlyStats.length === 0}
             previewTitle={`Rapport Mensuel ${selectedYear}`}
             previewSubtitle={`Statistiques mensuelles de l'année ${selectedYear}`}

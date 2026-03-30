@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileSpreadsheet, FileText, Eye, Settings, Loader2, FileCheck } from "lucide-react";
+import { FileSpreadsheet, FileText, Eye, Settings, FileCheck, FileType } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +12,7 @@ import {
 import { ExportPreviewDialog } from "./ExportPreviewDialog";
 import { PDFExportConfigDialog } from "./PDFExportConfigDialog";
 import { PDFExportSettings, defaultPDFSettings } from "@/lib/exportUtils";
-import { useReportSettings, convertToExportSettings, ReportSettings } from "@/hooks/useReportSettings";
+import { useOfficialReportsConfig } from "@/hooks/useOfficialReportsConfig";
 import { useDefaultReports } from "@/hooks/useDefaultReports";
 import { Badge } from "@/components/ui/badge";
 
@@ -25,6 +25,7 @@ interface ExportColumn {
 interface ExportButtonsProps {
   onExportPDF: (settings?: PDFExportSettings) => void;
   onExportExcel: (settings?: PDFExportSettings) => void;
+  onExportWord?: () => void;
   disabled?: boolean;
   // Props for preview functionality
   previewTitle?: string;
@@ -37,24 +38,12 @@ interface ExportButtonsProps {
   restrictToDefaultReports?: boolean;
 }
 
-/**
- * Merges database settings with any overrides
- */
-function mergeWithDbSettings(
-  dbSettings: ReportSettings | null,
-  overrides?: Partial<PDFExportSettings>
-): PDFExportSettings {
-  if (!dbSettings) {
-    return { ...defaultPDFSettings, ...overrides };
-  }
 
-  const baseSettings = convertToExportSettings(dbSettings);
-  return { ...baseSettings, ...overrides };
-}
 
 export function ExportButtons({ 
   onExportPDF, 
-  onExportExcel, 
+  onExportExcel,
+  onExportWord, 
   disabled,
   previewTitle,
   previewSubtitle,
@@ -67,8 +56,9 @@ export function ExportButtons({
   const [showPDFConfig, setShowPDFConfig] = useState(false);
   const [currentSettings, setCurrentSettings] = useState<PDFExportSettings>(defaultPDFSettings);
   
-  // Load database report settings
-  const { settings: dbSettings, isLoading: isLoadingSettings } = useReportSettings();
+  // Charger la config officielle
+  const { configs } = useOfficialReportsConfig();
+  const officialConfig = configs.feuilleCaisse;
   
   // Accès aux rapports par défaut
   const { 
@@ -80,28 +70,15 @@ export function ExportButtons({
     exportConfig
   } = useDefaultReports();
   
-  // Update current settings when DB settings are loaded
-  useEffect(() => {
-    if (dbSettings && 'id' in dbSettings) {
-      const appliedSettings = convertToExportSettings(dbSettings as ReportSettings);
-      setCurrentSettings(appliedSettings);
-    }
-  }, [dbSettings]);
-  
   const hasPreviewData = previewTitle && previewColumns && previewData;
-  
-  // Vérifier si l'export est autorisé selon la configuration
-  const isExportAllowed = !restrictToDefaultReports || (restrictToDefaultReports && exportConfig.restrictToDefaultReports);
 
   const handleExportPDFWithSettings = (settings: PDFExportSettings) => {
     if (restrictToDefaultReports && !canExport()) {
       showRestrictionMessage();
       return;
     }
-    // Merge user customizations with DB settings
-    const mergedSettings = mergeWithDbSettings(dbSettings as ReportSettings | null, settings);
-    setCurrentSettings(mergedSettings);
-    onExportPDF(mergedSettings);
+    setCurrentSettings(settings);
+    onExportPDF(settings);
   };
 
   const handleQuickExportPDF = () => {
@@ -109,9 +86,7 @@ export function ExportButtons({
       showRestrictionMessage();
       return;
     }
-    // Use DB settings merged with current settings
-    const mergedSettings = mergeWithDbSettings(dbSettings as ReportSettings | null, currentSettings);
-    onExportPDF(mergedSettings);
+    onExportPDF(currentSettings);
   };
 
   const handleExportExcel = () => {
@@ -119,21 +94,15 @@ export function ExportButtons({
       showRestrictionMessage();
       return;
     }
-    // Use DB settings merged with current settings
-    const mergedSettings = mergeWithDbSettings(dbSettings as ReportSettings | null, currentSettings);
-    onExportExcel(mergedSettings);
+    onExportExcel(currentSettings);
   };
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" disabled={disabled || isLoadingSettings}>
-            {isLoadingSettings ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <FileText className="h-4 w-4 mr-2" />
-            )}
+          <Button variant="outline" disabled={disabled}>
+            <FileText className="h-4 w-4 mr-2" />
             Exporter
           </Button>
         </DropdownMenuTrigger>
@@ -185,6 +154,12 @@ export function ExportButtons({
             <FileSpreadsheet className="h-4 w-4 mr-2 text-success" />
             Exporter en Excel
           </DropdownMenuItem>
+          {onExportWord && (
+            <DropdownMenuItem onClick={onExportWord} className="cursor-pointer">
+              <FileType className="h-4 w-4 mr-2 text-blue-600" />
+              Exporter en Word
+            </DropdownMenuItem>
+          )}
           
           {/* Indication si les exports sont restreints */}
           {restrictToDefaultReports && (

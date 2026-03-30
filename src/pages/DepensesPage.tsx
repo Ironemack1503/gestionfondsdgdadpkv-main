@@ -40,6 +40,7 @@ import { useLocalUserRole } from "@/hooks/useLocalUserRole";
 import { printBonDepense, downloadBonDepense } from "@/lib/printBon";
 import { useToast } from "@/hooks/use-toast";
 import { exportToPDF, exportToExcel, getDepensesExportConfig, PDFExportSettings } from "@/lib/exportUtils";
+import { exportToWord, generateTableHTML } from "@/lib/wordExport";
 import { CreateDepenseDialog, EditDepenseDialog, ViewTransactionDialog } from "@/components/dialogs";
 
 export default function DepensesPage() {
@@ -161,6 +162,25 @@ export default function DepensesPage() {
       }));
       const config = getDepensesExportConfig(dataWithRubrique);
       exportToExcel({ ...config, pdfSettings: settings });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportWord = async () => {
+    setIsExporting(true);
+    try {
+      const allData = await fetchAllForExport();
+      const dataWithRubrique = allData.map(d => ({
+        ...d,
+        rubrique_libelle: d.rubrique?.libelle || 'N/A',
+      }));
+      const config = getDepensesExportConfig(dataWithRubrique);
+      const tableHTML = generateTableHTML(
+        config.columns.map(c => ({ header: c.header, key: c.key, type: c.type })),
+        config.data
+      );
+      exportToWord({ title: config.title, filename: config.filename, content: tableHTML });
     } finally {
       setIsExporting(false);
     }
@@ -404,6 +424,7 @@ export default function DepensesPage() {
               <ExportButtons
                 onExportPDF={handleExportPDF}
                 onExportExcel={handleExportExcel}
+                onExportWord={handleExportWord}
                 disabled={totalCount === 0 || isExporting}
                 previewTitle="Liste des Dépenses"
                 previewSubtitle={dateFilter !== "all" || rubriqueFilter !== "all" ? `Filtres appliqués` : undefined}

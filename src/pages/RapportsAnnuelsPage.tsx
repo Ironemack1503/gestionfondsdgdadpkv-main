@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { Loader2, TrendingUp, TrendingDown, Wallet, Calendar } from 'lucide-react';
 import { StatCard } from '@/components/shared/StatCard';
 import { exportToPDF, exportToExcel, getRapportAnnuelExportConfig, PDFExportSettings } from '@/lib/exportUtils';
+import { exportToWord, generateTableHTML } from '@/lib/wordExport';
 import { formatMontant } from '@/lib/utils';
 
 export default function RapportsAnnuelsPage() {
@@ -52,6 +53,17 @@ export default function RapportsAnnuelsPage() {
     }
   };
 
+  const handleExportWord = () => {
+    if (annualStats) {
+      const config = getRapportAnnuelExportConfig(annualStats, startYear, currentYear);
+      const tableHTML = generateTableHTML(
+        config.columns.map(c => ({ header: c.header, key: c.key, type: c.type })),
+        config.data
+      );
+      exportToWord({ title: config.title, filename: config.filename, content: tableHTML });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -69,6 +81,7 @@ export default function RapportsAnnuelsPage() {
           <ExportButtons
             onExportPDF={handleExportPDF}
             onExportExcel={handleExportExcel}
+            onExportWord={handleExportWord}
             disabled={!annualStats || annualStats.length === 0}
             previewTitle={`Rapport Annuel ${startYear} - ${currentYear}`}
             previewSubtitle={`Comparaison des statistiques sur ${annualStats?.length || 0} années`}

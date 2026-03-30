@@ -9,9 +9,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileSpreadsheet, FileText, Printer, X, Loader2, Eye, Download } from "lucide-react";
+import { FileSpreadsheet, FileText, Printer, X, Download } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useReportSettings, ReportSettings, convertToExportSettings } from "@/hooks/useReportSettings";
+import { useOfficialReportsConfig } from "@/hooks/useOfficialReportsConfig";
 import { toast } from "sonner";
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -53,7 +53,7 @@ const getCellValue = (item: Record<string, any>, key: string): string => {
   const value = item[key];
   if (value === null || value === undefined) return '';
   
-  if (key === 'date' || key === 'created_at') {
+  if (key === 'date' || key === 'date_transaction' || key === 'created_at') {
     return formatDate(value);
   }
   
@@ -63,24 +63,6 @@ const getCellValue = (item: Record<string, any>, key: string): string => {
   }
   
   return String(value);
-};
-
-// Helper to convert hex to RGB for background styling
-const hexToRgba = (hex: string, alpha: number = 1): string => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return `rgba(59, 130, 246, ${alpha})`;
-  return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
-};
-
-// Determine if color is light or dark for text contrast
-const isLightColor = (hex: string): boolean => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return false;
-  const r = parseInt(result[1], 16);
-  const g = parseInt(result[2], 16);
-  const b = parseInt(result[3], 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.5;
 };
 
 export function ExportPreviewDialog({
@@ -94,10 +76,9 @@ export function ExportPreviewDialog({
   onExportExcel,
 }: ExportPreviewDialogProps) {
   const [activeTab, setActiveTab] = useState<"preview" | "pdf" | "excel">("pdf");
-  const { settings: dbSettings, isLoading } = useReportSettings();
-
-  // Cast settings to ReportSettings if available
-  const reportSettings = dbSettings && 'id' in dbSettings ? dbSettings as ReportSettings : null;
+  const { configs } = useOfficialReportsConfig();
+  // Utiliser la config feuilleCaisse comme base pour les exports génériques
+  const config = configs.feuilleCaisse;
 
   const handleExportPDF = () => {
     onExportPDF();
@@ -113,369 +94,232 @@ export function ExportPreviewDialog({
     window.print();
   };
 
-  // Generate a low-resolution preview PDF
+  // Générer un aperçu PDF avec le nouveau format officiel
   const handlePreviewPDF = async () => {
     try {
       toast.info("Génération de l'aperçu PDF...");
       
-      const previewHeaderColor = reportSettings?.couleur_principale || '#3b82f6';
-      const titleTextPreview = reportSettings?.titre_entete || 'Direction Générale des Douanes et Accises';
-      const subtitleTextPreview = reportSettings?.sous_titre || 'Rapport Financier';
-      const footerTextPreview = reportSettings?.contenu_pied_page || "Tous mobilisés pour une douane d'action et d'excellence !";
-      const previewShowWatermark = reportSettings?.filigrane_actif ?? true;
-      const previewWatermarkText = reportSettings?.filigrane_texte || 'DGDA';
-      const previewOrientation = (reportSettings?.orientation || 'portrait') as 'portrait' | 'landscape';
+      const orientation = config.orientation || 'portrait';
       
-      // Create PDF
       const doc = new jsPDF({
-        orientation: previewOrientation,
+        orientation: orientation as 'portrait' | 'landscape',
         unit: 'mm',
         format: 'a4',
       });
 
       const pageWidth = doc.internal.pageSize.width;
-      const pageHeight = doc.internal.pageSize.height;
+      let yPos = 15;
 
-      // Add PREVIEW watermark in red at top
-      doc.saveGraphicsState();
-      doc.setTextColor(255, 0, 0);
-      doc.setFontSize(50);
-      doc.setFont('helvetica', 'bold');
-      doc.text('APERÇU', pageWidth / 2, 35, { align: 'center' });
-      doc.restoreGraphicsState();
-
-      // Add logo
-      try {
-        const img = new Image();
-        img.src = dgdaLogo;
-        await new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = resolve;
-        });
-        doc.addImage(img, 'JPEG', 14, 42, 20, 20);
-      } catch (e) {
-        console.warn('Could not load logo');
+      // En-tête officiel centré (italic)
+      doc.setFont('times', 'italic');
+      doc.setFontSize(11);
+      doc.text(config.headerLine1, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 5;
+      doc.text(config.headerLine2, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 5;
+      doc.text(config.headerLine3, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 5;
+      
+      // D.G.D.A en gras
+      doc.setFont('times', 'bold');
+      doc.text('D.G.D.A', pageWidth / 2, yPos, { align: 'center' });
+      yPos += 5;
+      
+      if (config.headerLine4) {
+        doc.setFont('times', 'italic');
+        doc.text(config.headerLine4, pageWidth / 2, yPos, { align: 'center' });
+        yPos += 5;
       }
 
-      // Header text
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(0, 0, 0);
-      doc.text('République Démocratique du Congo', pageWidth / 2, 48, { align: 'center' });
-      
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Ministère des Finances', pageWidth / 2, 53, { align: 'center' });
-      doc.text(titleTextPreview, pageWidth / 2, 58, { align: 'center' });
-      
-      const hexResult = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(previewHeaderColor);
-      if (subtitleTextPreview) {
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'italic');
-        if (hexResult) {
-          doc.setTextColor(parseInt(hexResult[1], 16), parseInt(hexResult[2], 16), parseInt(hexResult[3], 16));
+      // Logo centré
+      if (config.showLogo) {
+        try {
+          const logoImg = new Image();
+          logoImg.src = dgdaLogo;
+          const logoSize = 20;
+          doc.addImage(dgdaLogo, 'JPEG', (pageWidth - logoSize) / 2, yPos, logoSize, logoSize);
+          yPos += logoSize + 5;
+        } catch {
+          yPos += 5;
         }
-        doc.text(subtitleTextPreview, pageWidth / 2, 63, { align: 'center' });
       }
 
-      // Separator line
-      if (hexResult) {
-        doc.setDrawColor(parseInt(hexResult[1], 16), parseInt(hexResult[2], 16), parseInt(hexResult[3], 16));
-      }
-      doc.setLineWidth(0.5);
-      doc.line(14, 68, pageWidth - 14, 68);
+      // BUREAU COMPTABLE souligné
+      doc.setFont('times', 'bold');
+      doc.setFontSize(11);
+      const bcText = 'BUREAU COMPTABLE';
+      const bcWidth = doc.getTextWidth(bcText);
+      doc.text(bcText, pageWidth / 2, yPos, { align: 'center' });
+      doc.line((pageWidth - bcWidth) / 2, yPos + 1, (pageWidth + bcWidth) / 2, yPos + 1);
+      yPos += 10;
 
-      // Document title
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(0, 0, 0);
-      doc.text(title, 14, 76);
+      // Titre du rapport souligné
+      doc.setFont('times', 'bold');
+      doc.setFontSize(config.titleSize || 14);
+      const titleWidth = doc.getTextWidth(title);
+      doc.text(title, pageWidth / 2, yPos, { align: 'center' });
+      doc.line((pageWidth - titleWidth) / 2, yPos + 1, (pageWidth + titleWidth) / 2, yPos + 1);
+      yPos += 8;
 
       if (subtitle) {
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 100, 100);
-        doc.text(subtitle, 14, 82);
+        doc.setFont('times', 'normal');
+        doc.setFontSize(10);
+        doc.text(subtitle, pageWidth / 2, yPos, { align: 'center' });
+        yPos += 6;
       }
 
-      // Generation date
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'italic');
-      doc.text(`Aperçu généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 14, subtitle ? 88 : 82);
-
-      // Prepare table data (limited to first 10 rows for preview)
-      const previewData = data.slice(0, 10);
+      // Tableau de données
       const tableHeaders = columns.map(col => col.header);
-      const tableData = previewData.map(item => 
+      const tableData = data.map(item =>
         columns.map(col => getCellValue(item, col.key))
       );
 
-      // Header color RGB
-      const headerRgb: [number, number, number] = hexResult 
-        ? [parseInt(hexResult[1], 16), parseInt(hexResult[2], 16), parseInt(hexResult[3], 16)]
-        : [59, 130, 246];
-
-      // Add table
       autoTable(doc, {
         head: [tableHeaders],
         body: tableData,
-        startY: subtitle ? 93 : 87,
+        startY: yPos,
+        theme: 'grid',
         styles: {
-          fontSize: 8,
+          font: 'times',
+          fontSize: config.textSize || 9,
           cellPadding: 2,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.2,
         },
         headStyles: {
-          fillColor: headerRgb,
+          fillColor: [30, 64, 175],
           textColor: [255, 255, 255],
           fontStyle: 'bold',
+          halign: 'center',
         },
         alternateRowStyles: {
           fillColor: [245, 247, 250],
         },
-        margin: { top: 14, right: 14, bottom: 40, left: 14 },
+        margin: { left: 15, right: 15 },
       });
 
-      // Add note about limited data
-      if (data.length > 10) {
-        const finalY = (doc as any).lastAutoTable?.finalY || 150;
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'italic');
-        doc.setTextColor(150, 150, 150);
-        doc.text(`Aperçu limité à 10 lignes sur ${data.length} - Export complet pour toutes les données`, 14, finalY + 8);
+      // Date et lieu
+      const finalY = (doc as any).lastAutoTable?.finalY || yPos + 50;
+      doc.setFont('times', 'italic');
+      doc.setFontSize(10);
+      const now = new Date();
+      const dateStr = `Fait à Kinshasa, le ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+      doc.text(dateStr, pageWidth - 20, finalY + 10, { align: 'right' });
+
+      // Signatures
+      const sigY = finalY + 25;
+      doc.setFont('times', 'bold');
+      doc.setFontSize(10);
+      if (config.signatureTitle1) {
+        doc.text(config.signatureTitle1.toUpperCase(), pageWidth / 4, sigY, { align: 'center' });
+        if (config.signatureName1) {
+          doc.setFont('times', 'bold');
+          const name1 = config.signatureName1;
+          const name1Width = doc.getTextWidth(name1);
+          doc.text(name1, pageWidth / 4, sigY + 20, { align: 'center' });
+          doc.line(pageWidth / 4 - name1Width / 2, sigY + 21, pageWidth / 4 + name1Width / 2, sigY + 21);
+        }
+      }
+      if (config.signatureTitle2) {
+        doc.setFont('times', 'bold');
+        doc.text(config.signatureTitle2.toUpperCase(), (3 * pageWidth) / 4, sigY, { align: 'center' });
+        if (config.signatureName2) {
+          const name2 = config.signatureName2;
+          const name2Width = doc.getTextWidth(name2);
+          doc.text(name2, (3 * pageWidth) / 4, sigY + 20, { align: 'center' });
+          doc.line((3 * pageWidth) / 4 - name2Width / 2, sigY + 21, (3 * pageWidth) / 4 + name2Width / 2, sigY + 21);
+        }
       }
 
-      // Add DGDA watermark if enabled
-      if (previewShowWatermark) {
-        doc.saveGraphicsState();
-        doc.setTextColor(230, 230, 230);
-        doc.setFontSize(60);
-        doc.setFont('helvetica', 'bold');
-        doc.text(previewWatermarkText, pageWidth / 2, pageHeight / 2, { align: 'center', angle: 45 });
-        doc.restoreGraphicsState();
-      }
-
-      // Footer
-      const footerY = pageHeight - 25;
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.3);
-      doc.line(14, footerY - 2, pageWidth - 14, footerY - 2);
-
+      // Pied de page
+      const pageHeight = doc.internal.pageSize.height;
+      doc.setDrawColor(150, 150, 150);
+      doc.line(15, pageHeight - 18, pageWidth - 15, pageHeight - 18);
+      doc.setFont('times', 'italic');
       doc.setFontSize(7);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(100, 100, 100);
-      doc.text(footerTextPreview, pageWidth / 2, footerY + 3, { align: 'center' });
-      
-      doc.setFont('helvetica', 'normal');
-      doc.text('Immeuble DGDA, Place LE ROYAL, Bld du 30 Juin, Kinshasa/Gombe', pageWidth / 2, footerY + 8, { align: 'center' });
-      
-      doc.setFontSize(8);
-      doc.setTextColor(255, 0, 0);
-      doc.setFont('helvetica', 'bold');
-      doc.text('DOCUMENT APERÇU - NON OFFICIEL', pageWidth / 2, footerY + 15, { align: 'center' });
+      doc.setTextColor(120, 120, 120);
+      if (config.footerLine1) doc.text(config.footerLine1, pageWidth / 2, pageHeight - 14, { align: 'center' });
+      if (config.footerLine2) doc.text(config.footerLine2, pageWidth / 2, pageHeight - 11, { align: 'center' });
+      if (config.footerLine3) doc.text(config.footerLine3, pageWidth / 2, pageHeight - 8, { align: 'center' });
+      if (config.footerLine4) doc.text(config.footerLine4, pageWidth / 2, pageHeight - 5, { align: 'center' });
 
-      // Save the preview PDF
-      doc.save(`apercu_${title.toLowerCase().replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+      // Ouvrir l'aperçu
+      const pdfBlob = doc.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      window.open(url, '_blank');
       
-      toast.success("Aperçu PDF téléchargé");
+      toast.success("Aperçu PDF généré !");
     } catch (error) {
-      console.error('Error generating preview PDF:', error);
-      toast.error("Erreur lors de la génération de l'aperçu");
+      console.error('Erreur PDF:', error);
+      toast.error("Erreur lors de la génération du PDF");
     }
   };
 
-  // Get styling from database settings
-  const headerColor = reportSettings?.couleur_principale || '#3b82f6';
-  const headerTextColor = isLightColor(headerColor) ? '#000000' : '#ffffff';
-  const showWatermark = reportSettings?.filigrane_actif ?? true;
-  const watermarkText = reportSettings?.filigrane_texte || 'DGDA';
-  const titleText = reportSettings?.titre_entete || 'Direction Générale des Douanes et Accises';
-  const subtitleText = reportSettings?.sous_titre || 'Rapport Financier';
-  const footerText = reportSettings?.contenu_pied_page || "Tous mobilisés pour une douane d'action et d'excellence !";
-  const showDate = reportSettings?.afficher_date ?? true;
-  const showPageNumber = reportSettings?.afficher_numero_page ?? true;
-  const fontFamily = reportSettings?.police === 'times' ? 'Times New Roman, serif' : 
-                     reportSettings?.police === 'courier' ? 'Courier New, monospace' : 
-                     'Helvetica, Arial, sans-serif';
-  const fontSize = reportSettings?.taille_police || 10;
-  const logoPosition = reportSettings?.position_logo || 'gauche';
-  const orientation = reportSettings?.orientation || 'portrait';
-
-  // Page dimensions based on orientation
-  const isLandscape = orientation === 'landscape';
-  const pageAspect = isLandscape ? 'aspect-[297/210]' : 'aspect-[210/297]';
-
-  if (isLoading) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg">
-          <div className="flex items-center justify-center p-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <span className="ml-2">Chargement des paramètres...</span>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Printer className="h-5 w-5" />
-            Aperçu avant export
+            <FileText className="h-5 w-5 text-primary" />
+            Aperçu du rapport — {title}
           </DialogTitle>
           <DialogDescription>
-            Prévisualisation avec les paramètres de mise en forme configurés
+            Prévisualisation du rapport au format officiel DGDA
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 flex flex-col min-h-0">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="preview">Aperçu données</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="pdf">Aperçu PDF</TabsTrigger>
             <TabsTrigger value="excel">Aperçu Excel</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="preview" className="flex-1 min-h-0 mt-4">
-            <ScrollArea className="h-[500px] rounded-md border">
-              <div className="p-4">
-                {/* Preview Header */}
-                <div className="text-center mb-6 pb-4 border-b">
-                  <div className="flex items-center justify-center gap-3 mb-2">
-                    <div 
-                      className="w-12 h-12 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: hexToRgba(headerColor, 0.1) }}
-                    >
-                      <span className="font-bold text-lg" style={{ color: headerColor }}>DGDA</span>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground italic">République Démocratique du Congo</p>
-                      <p className="text-sm font-semibold">{titleText}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Document Title */}
-                <div className="mb-4">
-                  <h2 className="text-xl font-bold">{title}</h2>
-                  {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
-                  {showDate && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Généré le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR')}
-                    </p>
-                  )}
-                </div>
-
-                {/* Data Table */}
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead style={{ backgroundColor: headerColor, color: headerTextColor }}>
-                      <tr>
-                        {columns.map((col, idx) => (
-                          <th key={idx} className="px-3 py-2 text-left font-semibold">
-                            {col.header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.slice(0, 50).map((item, rowIdx) => (
-                        <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
-                          {columns.map((col, colIdx) => (
-                            <td key={colIdx} className="px-3 py-2 border-t">
-                              {getCellValue(item, col.key)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {data.length > 50 && (
-                    <div className="p-3 bg-muted/50 text-center text-sm text-muted-foreground border-t">
-                      ... et {data.length - 50} autres lignes (affichage limité à 50 lignes)
-                    </div>
-                  )}
-                </div>
-
-                {/* Summary */}
-                <div className="mt-4 p-3 bg-muted/30 rounded-lg text-sm">
-                  <strong>Total des enregistrements:</strong> {data.length}
-                </div>
-
-                {/* Watermark simulation */}
-                {showWatermark && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5">
-                    <span className="text-6xl font-bold rotate-[-30deg]" style={{ color: headerColor }}>
-                      {watermarkText}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-          </TabsContent>
-
           <TabsContent value="pdf" className="flex-1 min-h-0 mt-4">
             <ScrollArea className="h-[500px] rounded-md border bg-gray-200">
               <div className="p-6 flex justify-center">
-                {/* PDF Page Simulation */}
+                {/* Simulation de la page PDF format officiel */}
                 <div 
-                  className={`bg-white shadow-2xl relative overflow-hidden ${isLandscape ? 'w-full max-w-4xl' : 'w-full max-w-xl'}`}
-                  style={{ 
-                    fontFamily,
-                    minHeight: isLandscape ? '400px' : '600px'
-                  }}
+                  className="bg-white shadow-2xl w-full max-w-xl relative overflow-hidden"
+                  style={{ fontFamily: config.bodyFont || 'Times New Roman', minHeight: '700px' }}
                 >
-                  {/* Watermark */}
-                  {showWatermark && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
-                      <span 
-                        className="text-8xl font-bold rotate-[45deg] opacity-[0.08]"
-                        style={{ color: headerColor }}
-                      >
-                        {watermarkText}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {/* Header */}
-                  <div className="p-4 relative z-10">
-                    <div className={`flex items-start gap-4 mb-4 ${logoPosition === 'centre' ? 'flex-col items-center' : ''}`}>
-                      {logoPosition === 'gauche' && (
-                        <img src={dgdaLogo} alt="DGDA Logo" className="w-14 h-14 object-contain" />
-                      )}
-                      <div className={`flex-1 ${logoPosition === 'centre' ? 'text-center' : ''}`}>
-                        <p className="text-xs italic">République Démocratique du Congo</p>
-                        <p className="text-xs font-semibold">Ministère des Finances</p>
-                        <p className="text-sm font-bold" style={{ color: headerColor }}>{titleText}</p>
-                        {subtitleText && (
-                          <p className="text-xs italic" style={{ color: headerColor }}>{subtitleText}</p>
-                        )}
+                  {/* En-tête officiel */}
+                  <div className="p-6 pb-0 relative z-10">
+                    <div className="text-center mb-2">
+                      <div className="text-[10px] leading-[1.6] italic">
+                        <p>{config.headerLine1}</p>
+                        <p>{config.headerLine2}</p>
+                        <p>{config.headerLine3}</p>
+                        <p className="font-bold not-italic">D.G.D.A</p>
+                        {config.headerLine4 && <p>{config.headerLine4}</p>}
                       </div>
-                      {logoPosition === 'centre' && (
-                        <img src={dgdaLogo} alt="DGDA Logo" className="w-14 h-14 object-contain" />
-                      )}
-                      {logoPosition === 'droite' && (
-                        <img src={dgdaLogo} alt="DGDA Logo" className="w-14 h-14 object-contain" />
-                      )}
                     </div>
 
-                    <div className="h-0.5 mb-4" style={{ backgroundColor: headerColor }}></div>
-
-                    {/* Document Title */}
-                    <h2 className="text-base font-bold mb-1" style={{ fontSize: `${fontSize + 4}px` }}>{title}</h2>
-                    {subtitle && <p className="text-xs text-gray-600 mb-1">{subtitle}</p>}
-                    {showDate && (
-                      <p className="text-[10px] text-gray-500 italic mb-3">
-                        Généré le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR')}
-                      </p>
+                    {/* Logo centré */}
+                    {config.showLogo && (
+                      <div className="flex justify-center my-3">
+                        <img src={dgdaLogo} alt="Logo DGDA" className="w-14 h-14 object-contain" />
+                      </div>
                     )}
 
-                    {/* Table preview */}
-                    <div className="border rounded text-xs mb-4 overflow-hidden" style={{ fontSize: `${fontSize}px` }}>
+                    {/* BUREAU COMPTABLE */}
+                    <div className="text-center mb-4">
+                      <span className="text-[10px] font-bold underline">BUREAU COMPTABLE</span>
+                    </div>
+
+                    {/* Titre du rapport */}
+                    <h2 
+                      className="text-center font-bold underline mb-1" 
+                      style={{ fontSize: `${(config.titleSize || 14) - 2}px`, color: config.headerColor }}
+                    >
+                      {title}
+                    </h2>
+                    {subtitle && <p className="text-xs text-gray-600 text-center mb-3">{subtitle}</p>}
+
+                    {/* Tableau de données */}
+                    <div className="border rounded text-xs mb-4 overflow-hidden" style={{ fontSize: `${config.textSize || 9}px` }}>
                       <table className="w-full">
-                        <thead style={{ backgroundColor: headerColor, color: headerTextColor }}>
-                          <tr>
+                        <thead>
+                          <tr style={{ backgroundColor: config.headerColor || '#1e40af', color: '#ffffff' }}>
                             {columns.map((col, idx) => (
                               <th key={idx} className="px-2 py-1.5 text-left font-semibold">{col.header}</th>
                             ))}
@@ -483,7 +327,7 @@ export function ExportPreviewDialog({
                         </thead>
                         <tbody>
                           {data.slice(0, 8).map((item, rowIdx) => (
-                            <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <tr key={rowIdx} style={rowIdx % 2 !== 0 ? { backgroundColor: config.alternateRowColor || '#f5f7fa' } : {}}>
                               {columns.map((col, colIdx) => (
                                 <td key={colIdx} className="px-2 py-1 border-t border-gray-200">
                                   {getCellValue(item, col.key)}
@@ -499,18 +343,43 @@ export function ExportPreviewDialog({
                         </div>
                       )}
                     </div>
+
+                    {/* Date et lieu */}
+                    <div className="text-right text-[9px] italic mb-4">
+                      Fait à Kinshasa, le {new Date().toLocaleDateString('fr-FR')}
+                    </div>
+
+                    {/* Signatures */}
+                    <div className="grid grid-cols-2 gap-8 mb-4">
+                      {config.signatureTitle1 && (
+                        <div className="text-center">
+                          <p className="font-bold text-[9px] tracking-wide">{config.signatureTitle1.toUpperCase()}</p>
+                          {config.signatureName1 && (
+                            <div className="mt-10">
+                              <p className="font-bold underline text-[8px]">{config.signatureName1}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {config.signatureTitle2 && (
+                        <div className="text-center">
+                          <p className="font-bold text-[9px] tracking-wide">{config.signatureTitle2.toUpperCase()}</p>
+                          {config.signatureName2 && (
+                            <div className="mt-10">
+                              <p className="font-bold underline text-[8px]">{config.signatureName2}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Footer */}
-                  <div className="absolute bottom-0 left-0 right-0 p-3 border-t bg-gray-50 text-center text-[9px] text-gray-500 z-10">
-                    <p className="italic font-medium" style={{ color: headerColor }}>{footerText}</p>
-                    <p>Immeuble DGDA, Place LE ROYAL, Bld du 30 Juin, Kinshasa/Gombe</p>
-                    <p>B.P.8248 KIN I / Tél. : +243(0) 818 968 481 - +243 (0) 821 920 215</p>
-                    <div className="flex justify-between items-center mt-1 pt-1 border-t border-gray-200">
-                      {showDate && <span>{new Date().toLocaleDateString('fr-FR')}</span>}
-                      <span className="flex-1"></span>
-                      {showPageNumber && <span>Page 1 sur 1</span>}
-                    </div>
+                  {/* Pied de page officiel */}
+                  <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-gray-400 text-center text-[7px] italic text-gray-500 z-10">
+                    {config.footerLine1 && <p className="mb-0.5">{config.footerLine1}</p>}
+                    {config.footerLine2 && <p className="mb-0.5">{config.footerLine2}</p>}
+                    {config.footerLine3 && <p className="mb-0.5">{config.footerLine3}</p>}
+                    {config.footerLine4 && <p>{config.footerLine4}</p>}
                   </div>
                 </div>
               </div>
@@ -520,30 +389,23 @@ export function ExportPreviewDialog({
           <TabsContent value="excel" className="flex-1 min-h-0 mt-4">
             <ScrollArea className="h-[500px] rounded-md border bg-white">
               <div className="p-4">
-                {/* Excel Simulation */}
-                <div className="border rounded-lg overflow-hidden font-mono text-xs" style={{ fontFamily }}>
-                  {/* Excel header rows */}
-                  <div className="p-3 border-b text-center" style={{ backgroundColor: hexToRgba(headerColor, 0.1) }}>
-                    <div className="text-gray-400">═══════════════════════════════════════════════════════════════</div>
-                    <div className="font-bold text-lg" style={{ color: headerColor }}>{titleText}</div>
-                    <div>{subtitleText}</div>
-                    <div className="text-gray-400">═══════════════════════════════════════════════════════════════</div>
+                <div className="border rounded-lg overflow-hidden font-mono text-xs" style={{ fontFamily: config.bodyFont || 'Times New Roman' }}>
+                  {/* Excel header */}
+                  <div className="p-3 border-b text-center bg-blue-50">
+                    <div className="italic text-gray-600 text-xs">{config.headerLine1}</div>
+                    <div className="italic text-gray-600 text-xs">{config.headerLine3}</div>
+                    <div className="font-bold">D.G.D.A</div>
+                    {config.headerLine4 && <div className="italic text-xs">{config.headerLine4}</div>}
                   </div>
                   
                   <div className="p-2 bg-gray-50 border-b">
-                    <div className="font-bold">{title}</div>
-                    {subtitle && <div className="text-gray-600">{subtitle}</div>}
-                    {showDate && (
-                      <div className="text-gray-500">
-                        Généré le {new Date().toLocaleDateString('fr-FR')} à {new Date().toLocaleTimeString('fr-FR')}
-                      </div>
-                    )}
+                    <div className="font-bold text-center">{title}</div>
+                    {subtitle && <div className="text-gray-600 text-center">{subtitle}</div>}
                   </div>
 
-                  {/* Excel table */}
                   <table className="w-full">
-                    <thead style={{ backgroundColor: headerColor, color: headerTextColor }}>
-                      <tr>
+                    <thead>
+                      <tr style={{ backgroundColor: config.headerColor || '#1e40af', color: '#ffffff' }}>
                         <th className="border px-2 py-1 text-left">#</th>
                         {columns.map((col, idx) => (
                           <th key={idx} className="border px-2 py-1 text-left">{col.header}</th>
@@ -552,7 +414,7 @@ export function ExportPreviewDialog({
                     </thead>
                     <tbody>
                       {data.slice(0, 5).map((item, rowIdx) => (
-                        <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : ''} style={rowIdx % 2 !== 0 ? { backgroundColor: hexToRgba(headerColor, 0.05) } : {}}>
+                        <tr key={rowIdx} style={rowIdx % 2 !== 0 ? { backgroundColor: config.alternateRowColor || '#f5f7fa' } : {}}>
                           <td className="border px-2 py-1 text-gray-500">{rowIdx + 1}</td>
                           {columns.map((col, colIdx) => (
                             <td key={colIdx} className="border px-2 py-1">
@@ -569,11 +431,8 @@ export function ExportPreviewDialog({
                     </div>
                   )}
 
-                  {/* Excel footer */}
-                  <div className="p-2 bg-gray-100 border-t text-center text-gray-600">
-                    <div className="text-gray-400">───────────────────────────────────────────────────────────────</div>
-                    <div className="italic" style={{ color: headerColor }}>{footerText}</div>
-                    <div>Immeuble DGDA, Place LE ROYAL, Kinshasa/Gombe</div>
+                  <div className="p-2 bg-gray-100 border-t text-center text-gray-600 italic text-xs">
+                    {config.footerLine1}
                   </div>
                 </div>
               </div>

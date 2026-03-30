@@ -22,6 +22,7 @@ import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useDepenses } from '@/hooks/useDepenses';
 import { formatMontant } from '@/lib/utils';
 import { exportToPDF, exportToExcel, PDFExportSettings } from '@/lib/exportUtils';
+import { exportToWord, generateTableHTML } from '@/lib/wordExport';
 
 type ContentieuxStatus = 'en_attente' | 'en_cours' | 'resolu' | 'annule';
 type ContentieuxType = 'anomalie' | 'doublon' | 'ecart' | 'litige';
@@ -221,6 +222,18 @@ export default function ContentieuxReportPage() {
     });
   };
 
+  const handleExportWord = () => {
+    const tableHTML = generateTableHTML(
+      exportColumns.map(c => ({ header: c.header, key: c.key, type: c.type })),
+      filteredContentieux
+    );
+    exportToWord({
+      title: 'Rapport des Contentieux',
+      filename: `rapport_contentieux_${format(new Date(), 'yyyyMMdd')}`,
+      content: tableHTML,
+    });
+  };
+
   const isLoading = loadingRecettes || loadingDepenses;
 
   return (
@@ -232,6 +245,7 @@ export default function ContentieuxReportPage() {
           <ExportButtons
             onExportPDF={handleExportPDF}
             onExportExcel={handleExportExcel}
+            onExportWord={handleExportWord}
             disabled={isLoading}
             previewTitle="Rapport des Contentieux"
             previewSubtitle={`Période: ${format(new Date(dateDebut), 'dd/MM/yyyy')} au ${format(new Date(dateFin), 'dd/MM/yyyy')}`}
