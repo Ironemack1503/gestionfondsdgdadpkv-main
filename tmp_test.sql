@@ -1,0 +1,1 @@
+﻿INSERT INTO resultats (numero,code,libelle,montant_recette,montant_depense,mois_annee,annee,num,categorie,categorie_depense,montant_lettres,comptable,daf,directeur_provincial,date_feuille,titre,cod) VALUES (1,'TEST','Test',100,0,'Jan',2024,1,'Recettes','Recettes','cent','Compt','Daf','DP','01/01/2024','Titre','COD');

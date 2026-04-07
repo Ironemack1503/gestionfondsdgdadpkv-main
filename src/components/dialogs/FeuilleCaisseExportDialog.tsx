@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { Calendar, FileText, FileDown, Printer } from 'lucide-react';
+import { Calendar, FileText, FileDown } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,7 @@ const MOIS_NOMS = [
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ];
 
-export type ExportType = 'pdf' | 'word' | 'print';
+export type ExportType = 'pdf' | 'word';
 
 export interface FeuilleCaisseExportParams {
   dateFeuille: string;
@@ -142,10 +142,6 @@ export function FeuilleCaisseExportDialog({
         </div>
 
         <DialogFooter className="flex flex-col sm:flex-row gap-2">
-          <Button variant="outline" onClick={() => handleExport('print')} className="gap-2">
-            <Printer className="w-4 h-4" />
-            Imprimer
-          </Button>
           <Button variant="outline" onClick={() => handleExport('word')} className="gap-2">
             <FileDown className="w-4 h-4" />
             Word

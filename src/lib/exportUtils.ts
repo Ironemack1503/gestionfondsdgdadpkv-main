@@ -2,6 +2,8 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { writeAoAToFile } from "@/lib/safeXlsx";
 import dgdaLogo from "@/assets/dgda-logo-new.jpg";
+import logoEntete from "@/assets/logo-entete-rapport.png";
+import logoPiedPage from "@/assets/logo-pied-page-rapport.png";
 import { formatMontant } from "@/lib/utils";
 
 export interface ExportColumn {
@@ -53,7 +55,7 @@ export const defaultPDFSettings: PDFExportSettings = {
   orientation: 'portrait',
   fontSize: 9,
   margins: 'normal',
-  showWatermark: false,
+  showWatermark: true,
   showFooter: true,
   showGenerationDate: true,
   // Default header - format officiel DGDA
@@ -62,11 +64,11 @@ export const defaultPDFSettings: PDFExportSettings = {
   customHeaderLine3: 'Direction Générale des Douanes et Accises',
   customHeaderLine4: 'Direction Provinciale de Kin Ville',
   useCustomHeader: false,
-  // Default footer - format officiel
-  customFooterLine1: 'Direction Générale des Douanes et Accises',
-  customFooterLine2: 'Tél: +243 81 234 5678 | Email: dgda.kv@finances.gouv.cd',
-  customFooterLine3: 'Site web: www.dgda.finances.gouv.cd',
-  customFooterLine4: 'Adresse: Avenue de la Douane, Kinshasa, RDC',
+  // Default footer - format Crystal Reports
+  customFooterLine1: 'Immeuble DGDA, Place LE ROYAL, Bld du 30 Juin, Kinshasa/Gombe',
+  customFooterLine2: 'B.P 8248 KIN I /Tél.: +243(0) 818 968 481 - +243 (0) 821 920 215 N.I.F.: A0700230J',
+  customFooterLine3: 'Email : info@douane.gouv.cd ; contact@douane.gouv.cd ; Web : https://www.douanes.gouv.cd',
+  customFooterLine4: '',
   useCustomFooter: false,
   // Table positioning
   tablePosition: 'gauche',
@@ -162,11 +164,12 @@ const getRawCellValue = (item: Record<string, any>, key: string, columnType?: 't
   return String(value);
 };
 
-// Default footer text for DGDA
-const DEFAULT_FOOTER_LINE1 = 'Direction Générale des Douanes et Accises';
-const DEFAULT_FOOTER_LINE2 = 'Tél: +243 81 234 5678 | Email: dgda.kv@finances.gouv.cd';
-const DEFAULT_FOOTER_LINE3 = 'Site web: www.dgda.finances.gouv.cd';
-const DEFAULT_FOOTER_LINE4 = 'Adresse: Avenue de la Douane, Kinshasa, RDC';
+// Default footer text for DGDA — format Crystal Reports
+const DEFAULT_FOOTER_SLOGAN = 'Tous mobilisés pour une douane d\'action et d\'excellence !';
+const DEFAULT_FOOTER_LINE1 = 'Immeuble DGDA, Place LE ROYAL, Bld du 30 Juin, Kinshasa/Gombe';
+const DEFAULT_FOOTER_LINE2 = 'B.P 8248 KIN I /Tél.: +243(0) 818 968 481 - +243 (0) 821 920 215 N.I.F.: A0700230J';
+const DEFAULT_FOOTER_LINE3 = 'Email : info@douane.gouv.cd ; contact@douane.gouv.cd ; Web : https://www.douanes.gouv.cd';
+const DEFAULT_FOOTER_LINE4 = '';
 
 // Default header text
 const DEFAULT_HEADER_LINE1 = 'République Démocratique du Congo';
@@ -174,39 +177,70 @@ const DEFAULT_HEADER_LINE2 = 'Ministère des Finances';
 const DEFAULT_HEADER_LINE3 = 'Direction Générale des Douanes et Accises';
 const DEFAULT_HEADER_LINE4 = 'Direction Provinciale de Kin Ville';
 
-// Add watermark to PDF page
+// Add watermark to PDF page — logo DGDA centré, semi-transparent
 const addPDFWatermark = (doc: jsPDF, show: boolean = true) => {
   if (!show) return;
-  // Watermark désactivé par défaut dans le nouveau format officiel
+  try {
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    const wmSize = 120;
+    const wmX = (pageWidth - wmSize) / 2;
+    const wmY = (pageHeight - wmSize) / 2;
+    // Dessiner le logo avec opacité réduite pour effet filigrane
+    doc.saveGraphicsState();
+    (doc as any).setGState(new (doc as any).GState({ opacity: 0.08 }));
+    doc.addImage(dgdaLogo, 'JPEG', wmX, wmY, wmSize, wmSize);
+    doc.restoreGraphicsState();
+  } catch {
+    // Silencieux si l'image n'est pas disponible
+  }
 };
 
-// Add custom footer to PDF page
+// Add custom footer to PDF page — image PNG officielle Crystal Reports
 const addPDFFooter = (doc: jsPDF, pageNumber: number, totalPages: number, settings: PDFExportSettings) => {
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
-  const footerStartY = pageHeight - 22;
   
   if (settings.showFooter) {
-    const line1 = settings.useCustomFooter ? settings.customFooterLine1 : DEFAULT_FOOTER_LINE1;
-    const line2 = settings.useCustomFooter ? settings.customFooterLine2 : DEFAULT_FOOTER_LINE2;
-    const line3 = settings.useCustomFooter ? settings.customFooterLine3 : DEFAULT_FOOTER_LINE3;
-    const line4 = settings.useCustomFooter ? settings.customFooterLine4 : DEFAULT_FOOTER_LINE4;
-    
-    // Thin gray separator line
-    doc.setDrawColor(150, 150, 150);
-    doc.setLineWidth(0.3);
-    doc.line(15, footerStartY - 2, pageWidth - 15, footerStartY - 2);
-    
-    // Footer lines - italic, small, gray
-    doc.setFontSize(7);
-    doc.setFont('times', 'italic');
-    doc.setTextColor(120, 120, 120);
-    
-    if (line1) doc.text(line1, pageWidth / 2, footerStartY + 2, { align: 'center' });
-    if (line2) doc.text(line2, pageWidth / 2, footerStartY + 6, { align: 'center' });
-    if (line3) doc.text(line3, pageWidth / 2, footerStartY + 10, { align: 'center' });
-    if (line4) doc.text(line4, pageWidth / 2, footerStartY + 14, { align: 'center' });
+    try {
+      // Image pied de page officielle : pleine largeur, en bas
+      // Dimensions proportionnelles : image source ~940x70px → hauteur ≈20mm
+      const imgH = 18;
+      const imgY = pageHeight - imgH - 5;
+      doc.addImage(logoPiedPage, 'PNG', 14, imgY, pageWidth - 28, imgH);
+    } catch {
+      // Fallback textuel si l'image échoue
+      const footerStartY = pageHeight - 28;
+      doc.setFontSize(8);
+      doc.setFont('times', 'bolditalic');
+      doc.setTextColor(0, 0, 0);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.line(14, footerStartY - 2, pageWidth - 14, footerStartY - 2);
+      doc.text(DEFAULT_FOOTER_SLOGAN, pageWidth / 2, footerStartY + 2, { align: 'center' });
+      doc.setFontSize(6.5);
+      doc.setFont('times', 'normal');
+      doc.setTextColor(80, 80, 80);
+      doc.text(DEFAULT_FOOTER_LINE1, pageWidth / 2, footerStartY + 6, { align: 'center' });
+      doc.text(DEFAULT_FOOTER_LINE2, pageWidth / 2, footerStartY + 9.5, { align: 'center' });
+      doc.text(DEFAULT_FOOTER_LINE3, pageWidth / 2, footerStartY + 13, { align: 'center' });
+    }
   }
+  
+  // "Imprimé le" à gauche et "Page N / M" à droite — sous l'image
+  const bottomY = pageHeight - 4;
+  doc.setFontSize(8);
+  doc.setFont('times', 'normal');
+  doc.setTextColor(0, 0, 0);
+  
+  if (settings.showGenerationDate) {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('fr-FR');
+    const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    doc.text(`Imprimé le : ${dateStr} ; ${timeStr}`, 14, bottomY);
+  }
+  
+  doc.text(`Page ${pageNumber} / ${totalPages}`, pageWidth - 14, bottomY, { align: 'right' });
 };
 
 // Helper to convert hex to RGB
@@ -217,65 +251,48 @@ const hexToRgb = (hex: string): [number, number, number] => {
     : [59, 130, 246]; // Default blue
 };
 
-// Add DGDA header with logo - Format officiel
+// Add DGDA header with logo - Format officiel Crystal Reports (image PNG officielle)
 const addPDFHeader = async (doc: jsPDF, settings: PDFExportSettings): Promise<number> => {
   const pageWidth = doc.internal.pageSize.width;
-  
-  const headerLine1 = settings.useCustomHeader ? settings.customHeaderLine1 : DEFAULT_HEADER_LINE1;
-  const headerLine2 = settings.useCustomHeader ? settings.customHeaderLine2 : DEFAULT_HEADER_LINE2;
-  const headerLine3 = settings.useCustomHeader ? settings.customHeaderLine3 : DEFAULT_HEADER_LINE3;
-  const headerLine4 = settings.useCustomHeader ? settings.customHeaderLine4 : DEFAULT_HEADER_LINE4;
-  
-  let yPos = 12;
+  let yPos = 8;
 
-  // En-tête centré en italique (format Crystal Reports)
-  doc.setFont('times', 'italic');
-  doc.setFontSize(11);
-  doc.setTextColor(0, 0, 0);
-  doc.text(headerLine1, pageWidth / 2, yPos, { align: 'center' });
-  yPos += 5;
-  doc.text(headerLine2, pageWidth / 2, yPos, { align: 'center' });
-  yPos += 5;
-  doc.text(headerLine3, pageWidth / 2, yPos, { align: 'center' });
-  yPos += 5;
-  
-  // D.G.D.A en gras
-  doc.setFont('times', 'bold');
-  doc.text('D.G.D.A', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 5;
-  
-  if (headerLine4) {
+  // 1. Image en-tête officielle : pleine largeur
+  try {
+    // Image source ~940x70px → hauteur ~18mm
+    const imgH = 18;
+    doc.addImage(logoEntete, 'PNG', 14, yPos, pageWidth - 28, imgH);
+    yPos += imgH + 4;
+  } catch {
+    // Fallback textuel si l'image échoue
     doc.setFont('times', 'italic');
-    doc.text(headerLine4, pageWidth / 2, yPos, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text('République Démocratique du Congo', pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
+    doc.text('Ministère des Finances', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    doc.text('Direction Générale des Douanes et Accises', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    doc.setFont('times', 'bold');
+    doc.text('D.G.D.A', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    doc.setFont('times', 'italic');
+    doc.text('Direction Provinciale de Kin Ville', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
   }
 
-  // Logo centré
-  if (settings.showLogo) {
-    try {
-      const img = new Image();
-      img.src = settings.useDefaultLogo || !settings.customLogoUrl ? dgdaLogo : settings.customLogoUrl;
-      await new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
-      const logoSize = 20;
-      doc.addImage(img, 'JPEG', (pageWidth - logoSize) / 2, yPos, logoSize, logoSize);
-      yPos += logoSize + 3;
-    } catch {
-      yPos += 3;
-    }
-  }
-
-  // BUREAU COMPTABLE souligné
-  doc.setFont('times', 'bold');
-  doc.setFontSize(11);
-  const bcText = 'BUREAU COMPTABLE';
+  // 2. BUREAU COMPTABLE souligné — aligné à gauche (format Crystal Reports)
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  const bcText = 'BUREAU  COMPTABLE';
   const bcWidth = doc.getTextWidth(bcText);
-  doc.text(bcText, pageWidth / 2, yPos, { align: 'center' });
-  doc.line((pageWidth - bcWidth) / 2, yPos + 1, (pageWidth + bcWidth) / 2, yPos + 1);
+  doc.text(bcText, 14, yPos);
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.4);
+  doc.line(14, yPos + 1, 14 + bcWidth, yPos + 1);
   yPos += 8;
-  
+
   return yPos;
 };
 
@@ -425,14 +442,12 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
   // 1. En-tête officiel DGDA + logo + BUREAU COMPTABLE
   const headerEndY = await addPDFHeader(doc, settings);
 
-  // 2. Titre
-  const titre = `FEUILLE DE CAISSE — MOIS DE ${moisLabel.toUpperCase()} ${annee}`;
-  doc.setFontSize(13);
+  // 2. Titre — centré, gras, remonté de 5mm
+  doc.setFontSize(10);
   doc.setFont('courier', 'bold');
   doc.setTextColor(0, 0, 0);
-  const titleW = doc.getTextWidth(titre);
-  doc.text(titre, pageWidth / 2, headerEndY + 2, { align: 'center' });
-  doc.line((pageWidth - titleW) / 2, headerEndY + 3, (pageWidth + titleW) / 2, headerEndY + 3);
+  doc.text('FEUILLE DE CAISSE MOIS DE', pageWidth / 2, headerEndY - 3, { align: 'center' });
+  doc.text(`${moisLabel.toUpperCase()} ${annee}`, pageWidth / 2, headerEndY + 2, { align: 'center' });
 
   // 3. Construire le body du tableau avec groupement par date
   const grouped = new Map<string, FeuilleCaissePDFItem[]>();
@@ -442,7 +457,7 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
     grouped.get(k)!.push(item);
   });
 
-  const fmtDate = (d: string) => new Date(d).toLocaleDateString('fr-FR');
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
   const fmtNum = (n: number) => formatMontant(n);
 
   const bodyRows: any[][] = [];
@@ -456,11 +471,13 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
 
     // Données du groupe
     items.forEach(item => {
+      // Nettoyer le libellé : masquer "null"
+      const libelleCleaned = (item.libelle || '').replace(/\s*-\s*null$/i, '').replace(/\s*null$/i, '');
       bodyRows.push([
         df,
         String(item.numeroOrdre),
         item.numeroBEO,
-        item.libelle,
+        libelleCleaned,
         item.recette ? fmtNum(item.recette) : '',
         item.depense ? fmtNum(item.depense) : '',
         item.imp || '',
@@ -468,14 +485,8 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
       rowIdx++;
     });
 
-    // Pied de groupe a — sous-total recettes
-    bodyRows.push(['', '', '', '', grpR > 0 ? fmtNum(grpR) : '', '', '']);
-    rowStyles[rowIdx] = { fillColor: [245, 245, 245], fontStyle: 'bolditalic' };
-    rowIdx++;
-
-    // Pied de groupe b — sous-total dépenses
-    bodyRows.push(['', '', '', '', '', grpD > 0 ? fmtNum(grpD) : '', '']);
-    rowStyles[rowIdx] = { fillColor: [245, 245, 245], fontStyle: 'bolditalic' };
+    // Pied de groupe — ligne vide de séparation
+    bodyRows.push(['', '', '', '', '', '', '']);
     rowIdx++;
   });
 
@@ -486,18 +497,18 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
   const balance = soldeInitial + solde;
 
   // TOTAL
-  bodyRows.push(['', '', '', 'TOTAL', fmtNum(totalR), fmtNum(totalD), '']);
-  rowStyles[rowIdx] = { fillColor: [229, 231, 235], fontStyle: 'bold' };
+  bodyRows.push([{ content: 'TOTAL :', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, fmtNum(totalR), fmtNum(totalD), '']);
+  rowStyles[rowIdx] = { fontStyle: 'bold' };
   rowIdx++;
 
   // ENCAISSE
   bodyRows.push([{ content: 'ENCAISSE :', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, { content: fmtNum(solde), colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, '']);
-  rowStyles[rowIdx] = { fillColor: [229, 231, 235], fontStyle: 'bold' };
+  rowStyles[rowIdx] = { fontStyle: 'bold' };
   rowIdx++;
 
   // BALANCE
   bodyRows.push([{ content: 'BALANCE :', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, { content: fmtNum(balance), colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, '']);
-  rowStyles[rowIdx] = { fillColor: [229, 231, 235], fontStyle: 'bold' };
+  rowStyles[rowIdx] = { fontStyle: 'bold' };
   rowIdx++;
 
   // 5. Dessiner le tableau
@@ -507,7 +518,7 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
         { content: 'Date', styles: { halign: 'center' } },
         { content: 'N°ORD', styles: { halign: 'center' } },
         { content: 'N°BEO', styles: { halign: 'center' } },
-        { content: 'LIBELLE', styles: { halign: 'left' } },
+        { content: 'LIBELLE', styles: { halign: 'center' } },
         { content: 'MONTANT', colSpan: 3, styles: { halign: 'center' } },
       ],
       [
@@ -518,29 +529,39 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
       ],
     ],
     body: bodyRows,
+    showHead: 'firstPage',
     startY: headerEndY + 8,
     styles: {
       fontSize: 8,
       font: 'courier',
-      cellPadding: 1.5,
+      cellPadding: 1,
       lineColor: [0, 0, 0],
       lineWidth: 0.2,
       textColor: [0, 0, 0],
+      overflow: 'ellipsize',
+      minCellHeight: 4,
     },
     headStyles: {
-      fillColor: [30, 64, 175],
-      textColor: [255, 255, 255],
+      fillColor: [255, 255, 255],
+      textColor: [0, 0, 0],
       fontStyle: 'bold',
+      halign: 'center',
       fontSize: 8,
+    },
+    bodyStyles: {
+      fillColor: [255, 255, 255],
+    },
+    alternateRowStyles: {
+      fillColor: [255, 255, 255],
     },
     columnStyles: {
       0: { cellWidth: 18, halign: 'center' },
       1: { cellWidth: 12, halign: 'center' },
-      2: { cellWidth: 22, halign: 'center' },
+      2: { cellWidth: 16, halign: 'center' },
       3: { cellWidth: 'auto' },
-      4: { cellWidth: 25, halign: 'right' },
-      5: { cellWidth: 25, halign: 'right' },
-      6: { cellWidth: 10, halign: 'center' },
+      4: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
+      5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
+      6: { cellWidth: 18, halign: 'center' },
     },
     didParseCell: function(hookData) {
       const r = hookData.row.index;
@@ -550,34 +571,49 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
         if (st.fontStyle) hookData.cell.styles.fontStyle = st.fontStyle as any;
       }
     },
-    margin: { top: 14, right: 14, bottom: 40, left: 14 },
+    margin: { top: 14, right: 2, bottom: 40, left: 2 },
   });
 
   // 6. Après le tableau : "Nous disons", date, signature
   const finalY = (doc as any).lastAutoTable?.finalY || 200;
+  const pageHeight = doc.internal.pageSize.height;
+  const signatureBlockHeight = 55; // hauteur nécessaire pour tout le bloc signature
   let y = finalY + 6;
 
-  doc.setFont('courier', 'bolditalic');
+  // Vérifier s'il reste assez d'espace pour le bloc signature complet
+  // (footerZone ≈ 35mm en bas de page)
+  if (y + signatureBlockHeight > pageHeight - 35) {
+    doc.addPage();
+    y = 20;
+  }
+
+  doc.setFont('courier', 'bold');
   doc.setFontSize(10);
-  doc.text('Nous disons :', 14, y);
-  doc.setFont('courier', 'italic');
-  doc.text(` ${totalEnLettres}`, 14 + doc.getTextWidth('Nous disons : '), y);
+  const labelND = 'Nous disons :  ';
+  const labelWidth = doc.getTextWidth(labelND);
+  const contentWidth = pageWidth - 28 - labelWidth; // largeur dispo pour le montant
+  const montantLines = doc.splitTextToSize(totalEnLettres, contentWidth);
+  // Première ligne : label + début du montant
+  doc.text(labelND + montantLines[0], 14, y);
+  // Lignes suivantes : indentées sous le montant
+  for (let li = 1; li < montantLines.length; li++) {
+    y += 5;
+    doc.text(montantLines[li], 14 + labelWidth, y);
+  }
   y += 8;
 
   doc.setFont('courier', 'normal');
   doc.setFontSize(10);
-  doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth - 14, y, { align: 'right' });
-  y += 12;
+  doc.text(`Fait \u00e0 Kinshasa, le ${dateFeuille}`, pageWidth - 10, y, { align: 'right' });
+  y += 10;
 
   doc.setFont('courier', 'bold');
-  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth - 14, y, { align: 'right' });
-  y += 20;
+  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth - 10, y, { align: 'right' });
+  y += 8;
 
   doc.setFont('courier', 'bold');
   doc.setFontSize(10);
-  const nameWidth = doc.getTextWidth(nomComptable);
-  doc.text(nomComptable, pageWidth - 14, y, { align: 'right' });
-  doc.line(pageWidth - 14 - nameWidth, y + 1, pageWidth - 14, y + 1);
+  doc.text(nomComptable, pageWidth - 10, y, { align: 'right' });
 
   // 7. Footer sur toutes les pages
   const pageCount = doc.getNumberOfPages();
@@ -587,6 +623,200 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
   }
 
   doc.save(`feuille_caisse_${moisLabel.toLowerCase()}_${annee}.pdf`);
+};
+
+/**
+ * Export PDF dédié Sommaire DGDA — format Crystal Reports SOMMAIRE
+ * Tableau IMP | DESIGNATION | RECETTES | DEPENSES
+ * Solde antérieur, recettes par libellé, dépenses par code IMP
+ * TOTAL / ENCAISSE / BALANCE, "Nous disons", date, signature
+ */
+export interface SommairePDFRow {
+  type: 'recette' | 'depense';
+  imp: string;
+  designation: string;
+  recette: number;
+  depense: number;
+}
+
+export interface SommairePDFOptions {
+  rows: SommairePDFRow[];
+  soldePrecedent: number;
+  moisLabel: string;
+  annee: number;
+  dateFeuille: string;
+  nomComptable: string;
+  encaisseEnLettres: string;
+}
+
+export const exportSommairePDF = async (options: SommairePDFOptions): Promise<void> => {
+  const { rows, soldePrecedent, moisLabel, annee, dateFeuille, nomComptable, encaisseEnLettres } = options;
+  const settings = defaultPDFSettings;
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width;
+
+  // 1. En-tête officiel DGDA
+  const headerEndY = await addPDFHeader(doc, settings);
+
+  // 2. Titre centré
+  doc.setFontSize(11);
+  doc.setFont('courier', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text(`SOMMAIRE DU MOIS DE ${moisLabel.toUpperCase()} ${annee}`, pageWidth / 2, headerEndY - 3, { align: 'center' });
+  doc.setFontSize(9);
+  doc.setFont('courier', 'normal');
+  doc.text('Direction Provinciale Kinshasa-Ville', pageWidth / 2, headerEndY + 2, { align: 'center' });
+  doc.text(`DGDA/3400/DP/KV/SDAF/   /${annee}`, pageWidth / 2, headerEndY + 7, { align: 'center' });
+
+  const fmtNum = (n: number) => formatMontant(n);
+
+  // 3. Construire le body du tableau
+  const bodyRows: any[][] = [];
+
+  // Solde antérieur
+  bodyRows.push([
+    { content: '707820', styles: { halign: 'center', fontStyle: 'bold' } },
+    { content: 'Solde du mois antérieur', styles: { fontStyle: 'bold' } },
+    { content: fmtNum(soldePrecedent), styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: '', styles: { halign: 'right' } },
+  ]);
+
+  // Recettes
+  for (const row of rows.filter(r => r.type === 'recette')) {
+    bodyRows.push([
+      { content: row.imp, styles: { halign: 'center', fontStyle: 'bold' } },
+      { content: row.designation, styles: { fontStyle: 'bold' } },
+      { content: fmtNum(row.recette), styles: { halign: 'right', fontStyle: 'bold' } },
+      { content: '', styles: { halign: 'right' } },
+    ]);
+  }
+
+  // Dépenses
+  for (const row of rows.filter(r => r.type === 'depense')) {
+    bodyRows.push([
+      { content: row.imp, styles: { halign: 'center', fontStyle: 'bold' } },
+      { content: row.designation, styles: { fontStyle: 'bold' } },
+      { content: '', styles: { halign: 'right' } },
+      { content: fmtNum(row.depense), styles: { halign: 'right', fontStyle: 'bold' } },
+    ]);
+  }
+
+  // Calculs des totaux
+  const totalRecettesLignes = rows.filter(r => r.type === 'recette').reduce((s, r) => s + r.recette, 0);
+  const totalDepenses = rows.filter(r => r.type === 'depense').reduce((s, r) => s + r.depense, 0);
+  const totalRecettes = soldePrecedent + totalRecettesLignes;
+  const encaisse = totalRecettes - totalDepenses;
+
+  // TOTAL
+  bodyRows.push([
+    { content: 'TOTAL :', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(totalRecettes), styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(totalDepenses), styles: { halign: 'right', fontStyle: 'bold' } },
+  ]);
+  // ENCAISSE
+  bodyRows.push([
+    { content: 'ENCAISSE :', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(encaisse), colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
+  ]);
+  // BALANCE
+  bodyRows.push([
+    { content: 'BALANCE :', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(totalRecettes), styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(totalRecettes), styles: { halign: 'right', fontStyle: 'bold' } },
+  ]);
+
+  // 4. Tableau
+  autoTable(doc, {
+    head: [
+      [
+        { content: 'IMP.', styles: { halign: 'center' } },
+        { content: 'DESIGNATION', styles: { halign: 'center' } },
+        { content: 'MONTANTS', colSpan: 2, styles: { halign: 'center' } },
+      ],
+      [
+        { content: '', colSpan: 2 },
+        { content: 'RECETTES', styles: { halign: 'center' } },
+        { content: 'DEPENSES', styles: { halign: 'center' } },
+      ],
+    ],
+    body: bodyRows,
+    showHead: 'firstPage',
+    startY: headerEndY + 13,
+    styles: {
+      fontSize: 8,
+      font: 'courier',
+      cellPadding: 1.5,
+      lineColor: [0, 0, 0],
+      lineWidth: 0.2,
+      textColor: [0, 0, 0],
+      overflow: 'ellipsize',
+      minCellHeight: 4,
+    },
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      halign: 'center',
+      fontSize: 8,
+    },
+    bodyStyles: {
+      fillColor: [255, 255, 255],
+    },
+    alternateRowStyles: {
+      fillColor: [255, 255, 255],
+    },
+    columnStyles: {
+      0: { cellWidth: 18, halign: 'center' },
+      1: { cellWidth: 'auto' },
+      2: { cellWidth: 35, halign: 'right' },
+      3: { cellWidth: 35, halign: 'right' },
+    },
+    margin: { top: 14, right: 2, bottom: 40, left: 2 },
+  });
+
+  // 5. Bloc signature
+  const finalY = (doc as any).lastAutoTable?.finalY || 200;
+  const pageHeight = doc.internal.pageSize.height;
+  let y = finalY + 6;
+
+  if (y + 55 > pageHeight - 35) {
+    doc.addPage();
+    y = 20;
+  }
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(10);
+  const labelND = 'Nous disons :  ';
+  const labelWidth = doc.getTextWidth(labelND);
+  const contentWidth = pageWidth - 28 - labelWidth;
+  const montantLines = doc.splitTextToSize(encaisseEnLettres, contentWidth);
+  doc.text(labelND + montantLines[0], 14, y);
+  for (let li = 1; li < montantLines.length; li++) {
+    y += 5;
+    doc.text(montantLines[li], 14 + labelWidth, y);
+  }
+  y += 8;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth - 10, y, { align: 'right' });
+  y += 10;
+
+  doc.setFont('courier', 'bold');
+  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth - 10, y, { align: 'right' });
+  y += 8;
+
+  doc.text(nomComptable || '____________________', pageWidth - 10, y, { align: 'right' });
+
+  // 6. Footer sur toutes les pages
+  const pageCount2 = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount2; i++) {
+    doc.setPage(i);
+    addPDFFooter(doc, i, pageCount2, settings);
+  }
+
+  doc.save(`sommaire_${moisLabel.toLowerCase()}_${annee}.pdf`);
 };
 
 export const exportToExcel = ({ title, filename, columns, data, subtitle, pdfSettings, headerLines, footerLines }: ExportOptions): void => {

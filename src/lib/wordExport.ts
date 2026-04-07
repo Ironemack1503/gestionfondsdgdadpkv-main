@@ -5,6 +5,7 @@
 
 import { PDFExportSettings, defaultPDFSettings } from './exportUtils';
 import { formatMontant } from './utils';
+import { HEADER_IMAGE_BASE64, FOOTER_IMAGE_BASE64, FILIGRANE_IMAGE } from './reportImages';
 
 export interface WordExportOptions {
   title: string;
@@ -24,10 +25,10 @@ const DEFAULT_HEADER_LINES = [
 ];
 
 const DEFAULT_FOOTER_LINES = [
-  'Direction Générale des Douanes et Accises',
-  'Tél: +243 81 234 5678 | Email: dgda.kv@finances.gouv.cd',
-  'Site web: www.dgda.finances.gouv.cd',
-  'Adresse: Avenue de la Douane, Kinshasa, RDC',
+  'Tous mobilisés pour une douane d\'action et d\'excellence !',
+  'Immeuble DGDA, Place LE ROYAL, Bld du 30 Juin, Kinshasa/Gombe',
+  'B.P 8248 KIN I /Tél.: +243(0) 818 968 481 - +243 (0) 821 920 215 N.I.F.: A0700230J',
+  'Email : info@douane.gouv.cd ; contact@douane.gouv.cd ; Web : https://www.douanes.gouv.cd',
 ];
 
 /**
@@ -176,18 +177,28 @@ export function exportToWord({
         .footer {
           margin-top: 30px;
           padding-top: 10px;
-          border-top: 1px solid #999999;
+          border-top: 2px solid #000000;
           text-align: center;
           font-size: 8pt;
-          color: #888888;
-          font-style: italic;
+          color: #555555;
         }
         
         .footer-line {
-          margin: 3px 0;
+          margin: 2px 0;
         }
         
         .footer-line-1 {
+          font-weight: bold;
+          font-style: italic;
+          font-size: 9pt;
+          color: #000000;
+          margin-bottom: 4px;
+        }
+        
+        .footer-bottom {
+          margin-top: 8px;
+          font-size: 7pt;
+          color: #888888;
           font-style: italic;
         }
         
@@ -237,12 +248,26 @@ export function exportToWord({
           font-size: 14pt;
           font-weight: bold;
         }
+
+        .watermark {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          opacity: 0.06;
+          pointer-events: none;
+          z-index: -1;
+          width: 400px;
+          height: 400px;
+        }
       </style>
     </head>
     <body>
-      <!-- Header -->
-      <div class="header">
-        ${headerLines.map((line, i) => `<div class="header-line header-line-${i + 1}">${line}</div>`).join('')}
+      <!-- Filigrane -->
+      <img class="watermark" src="${FILIGRANE_IMAGE}" alt="" />
+      <!-- Header - Image en-tête Crystal Reports -->
+      <div style="text-align:center;margin-bottom:8px">
+        <img src="${HEADER_IMAGE_BASE64}" style="width:100%;max-width:700px;height:auto" alt="En-tête DGDA" />
       </div>
       
       <div class="bureau-comptable">BUREAU COMPTABLE</div>
@@ -253,9 +278,9 @@ export function exportToWord({
       <!-- Main Content -->
       ${content}
       
-      <!-- Footer -->
-      <div class="footer">
-        ${footerLines.map((line, i) => `<div class="footer-line footer-line-${i + 1}">${line}</div>`).join('')}
+      <!-- Footer - Image pied de page Crystal Reports -->
+      <div style="margin-top:30px;text-align:center">
+        <img src="${FOOTER_IMAGE_BASE64}" style="width:100%;max-width:700px;height:auto" alt="Pied de page DGDA" />
       </div>
     </body>
     </html>

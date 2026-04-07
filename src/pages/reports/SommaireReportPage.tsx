@@ -1,12 +1,11 @@
 /**
- * Sommaire Report Page
- * Displays summary of cash operations grouped by category
- * With monthly/annual views, filtering, and synthesis modes
- * Uses Advanced Report Editor templates for unified export
+ * Sommaire Report Page — format identique au PDF SOMMAIRE officiel DGDA
+ * Tableau : IMP | DESIGNATION | RECETTES | DEPENSES
+ * Recettes groupées par (imp, libellé), Dépenses groupées par code IMP
  */
 
 import { useState, useMemo } from 'react';
-import { Calendar, Loader2, FileText, FileSpreadsheet, FileDown, Printer, LayoutGrid, List, Filter, X } from 'lucide-react';
+import { Calendar, Loader2, FileText, FileDown, Printer } from 'lucide-react';
 import { formatMontant } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -14,871 +13,597 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { useReportData, numberToFrenchWords } from '@/hooks/useReportData';
-import { useAdvancedExport } from '@/hooks/useAdvancedExport';
-import { exportToPDF, exportToExcel, ExportColumn } from '@/lib/exportUtils';
-import { exportToWord, generateTableHTML, generateSummaryHTML } from '@/lib/wordExport';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { useRecettes } from '@/hooks/useRecettes';
+import { useDepenses } from '@/hooks/useDepenses';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useRubriques } from '@/hooks/useRubriques';
+import { numberToFrenchWords } from '@/hooks/useReportData';
+import { exportToWord } from '@/lib/wordExport';
+import { exportSommairePDF } from '@/lib/exportUtils';
+import { HEADER_IMAGE_BASE64, FOOTER_IMAGE_BASE64, FILIGRANE_IMAGE } from '@/lib/reportImages';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
-import { sortRubriquesWithSoldeFirst } from '@/lib/rubriquesSortUtils';
 
-const moisNoms = [
+// ── CONFIGURATION ─────────────────────────────────────────────────────────────
+
+const MOIS_NOMS = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ];
 
-type ViewMode = 'mensuel' | 'annuel';
-type DisplayMode = 'detail' | 'synthese';
+const DEPENSES_IMP_MAP: Record<string, string> = {
+  '604130': 'Articles alimentaires',
+  '604210': 'Carburant et lubrifiant',
+  '604300': "Produits d'entretien",
+  '604710': 'Fournitures de bureau',
+  '604720': 'Consommables informatiques',
+  '605100': 'Eau',
+  '605200': 'Electricité',
+  '618120': 'Déplacement',
+  '622210': 'Loyers locaux et bureaux de service',
+  '624000': 'Entretien, réparations et maintenance',
+  '626530': 'Abonnements',
+  '628100': 'Frais de communications et télécommunications',
+  '631000': 'Frais bancaire',
+  '632530': 'Frais de justice',
+  '632540': 'Paiement prime contentieuse',
+  '632831': 'Frais médicaux',
+  '632840': 'Frais de gardiennage et sécurité',
+  '632860': "Frais d'impression, reproduction et reliure",
+  '638410': 'Frais de mission intérieur',
+  '659800': 'Autres charges',
+  '661257': 'Prime du comptable',
+  '661272': 'Prime de surveillance SEP',
+  '661273': 'Prime amendes transactionnelles',
+  '663841': 'Collations',
+  '668340': 'Frais funéraires et assistance deuil',
+  '668360': 'Aide & secours',
+};
+
+const DEPENSES_000000_BUCKETS: { designation: string; patterns: string[] }[] = [
+  { designation: 'Fonctionnement SEP',                 patterns: ['fonct.*\\bsep\\b', '\\bsep\\b.*fonct'] },
+  { designation: 'Fonctionnement secr DP',             patterns: ['secr.*\\bdp\\b', '\\bdp\\b.*secr', 'secrétaire dp', 'secrétariat dp'] },
+  { designation: 'Fonctionnement unité genre',         patterns: ['unité genre', 'unite genre', '\\bgenre\\b'] },
+  { designation: 'Fonctionnement Zone économique',     patterns: ['\\bzes\\b', 'zone.*(eco|éco)', 'économique'] },
+  { designation: 'Fonctionnement Beach Ngobila',       patterns: ['ngobila', 'beach ngobila'] },
+  { designation: 'Fonctionnement Nocafex',             patterns: ['nocafex'] },
+  { designation: 'Fonctionnement Lerexcom',            patterns: ['lerexcom'] },
+  { designation: 'Fonctionnement GU',                  patterns: ['\\bgu\\b'] },
+  { designation: 'Fonctionnement Délégation syndicale', patterns: ['syndicale', 'délégation syndicale', 'delegation syndicale'] },
+  { designation: 'Salubrité',                          patterns: ['salubrité', 'salubrite'] },
+  { designation: 'Manutention',                        patterns: ['manutention'] },
+  { designation: 'Service extérieur',                  patterns: ['service ext', 'extérieur', 'exterieur'] },
+];
+
+function matchDepense000000(motif: string): string {
+  const lm = (motif || '').toLowerCase();
+  for (const bucket of DEPENSES_000000_BUCKETS) {
+    for (const pat of bucket.patterns) {
+      try {
+        if (new RegExp(pat, 'i').test(lm)) return bucket.designation;
+      } catch {
+        if (lm.includes(pat)) return bucket.designation;
+      }
+    }
+  }
+  return (motif || 'Fonctionnement divers').substring(0, 50).trim();
+}
+
+type SommaireRow = {
+  type: 'recette' | 'depense';
+  imp: string;
+  designation: string;
+  recette: number;
+  depense: number;
+};
+
+// ── COMPONENT ─────────────────────────────────────────────────────────────────
 
 export default function SommaireReportPage() {
   const { latestYear, latestMonth } = useLatestDataDate();
   const [selectedMois, setSelectedMois] = useState(latestMonth);
   const [selectedAnnee, setSelectedAnnee] = useState(latestYear);
-  const [viewMode, setViewMode] = useState<ViewMode>('mensuel');
-  const [displayMode, setDisplayMode] = useState<DisplayMode>('detail');
-  const [selectedRubrique, setSelectedRubrique] = useState<string>('all');
-  const [showSoldeDetails, setShowSoldeDetails] = useState(true);
-  
-  const { generateSommaire, calculateEtatResultat, isLoading, recettes, depenses } = useReportData();
-  const { rubriques } = useRubriques();
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
-  // Calculate date range based on view mode
+  const today = new Date();
+  const [dateFeuille, setDateFeuille] = useState(
+    `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`
+  );
+  const [exportMois, setExportMois] = useState(latestMonth);
+  const [exportAnnee, setExportAnnee] = useState(latestYear);
+  const [nomComptable, setNomComptable] = useState('');
+
+  const { recettes, isLoading: loadingR } = useRecettes(100000);
+  const { depenses, isLoading: loadingD } = useDepenses(100000);
+  const isLoading = loadingR || loadingD;
+
+  // Plage de dates du mois sélectionné
   const { dateDebut, dateFin } = useMemo(() => {
-    if (viewMode === 'mensuel') {
-      const debut = `${selectedAnnee}-${String(selectedMois).padStart(2, '0')}-01`;
-      const lastDay = new Date(selectedAnnee, selectedMois, 0).getDate();
-      const fin = `${selectedAnnee}-${String(selectedMois).padStart(2, '0')}-${lastDay}`;
-      return { dateDebut: debut, dateFin: fin };
-    } else {
-      // Annual view: January to selected month or full year
-      return {
-        dateDebut: `${selectedAnnee}-01-01`,
-        dateFin: `${selectedAnnee}-12-31`
-      };
-    }
-  }, [selectedMois, selectedAnnee, viewMode]);
+    const debut = `${selectedAnnee}-${String(selectedMois).padStart(2, '0')}-01`;
+    const lastDay = new Date(selectedAnnee, selectedMois, 0).getDate();
+    const fin = `${selectedAnnee}-${String(selectedMois).padStart(2, '0')}-${lastDay}`;
+    return { dateDebut: debut, dateFin: fin };
+  }, [selectedMois, selectedAnnee]);
 
-  // Fetch previous period balance
-  const { data: soldePrecedent = 0, isLoading: loadingBalance } = useQuery({
-    queryKey: ['previous-period-balance-sommaire', viewMode, selectedMois, selectedAnnee],
+  // Solde cumulé avant le début du mois
+  const { data: soldePrecedent = 0 } = useQuery({
+    queryKey: ['solde-precedent-sommaire', dateDebut],
     queryFn: async () => {
-      if (viewMode === 'annuel') {
-        // For annual, get balance from previous year
-        const prevYear = selectedAnnee - 1;
-        const { data: prevRecettes } = await supabase
-          .from('recettes')
-          .select('montant')
-          .gte('date_transaction', `${prevYear}-01-01`)
-          .lte('date_transaction', `${prevYear}-12-31`);
-
-        const { data: prevDepenses } = await supabase
-          .from('depenses')
-          .select('montant')
-          .gte('date_transaction', `${prevYear}-01-01`)
-          .lte('date_transaction', `${prevYear}-12-31`);
-
-        const totalRecettes = (prevRecettes || []).reduce((acc, r) => acc + Number(r.montant), 0);
-        const totalDepenses = (prevDepenses || []).reduce((acc, d) => acc + Number(d.montant), 0);
-        return totalRecettes - totalDepenses;
-      } else {
-        // Monthly balance
-        let prevMois = selectedMois - 1;
-        let prevAnnee = selectedAnnee;
-        if (prevMois === 0) {
-          prevMois = 12;
-          prevAnnee = selectedAnnee - 1;
-        }
-
-        const startDate = `${prevAnnee}-${String(prevMois).padStart(2, '0')}-01`;
-        const lastDayPrev = new Date(prevAnnee, prevMois, 0).getDate();
-        const endDate = `${prevAnnee}-${String(prevMois).padStart(2, '0')}-${lastDayPrev}`;
-
-        const { data: prevRecettes } = await supabase
-          .from('recettes')
-          .select('montant')
-          .gte('date_transaction', startDate)
-          .lte('date_transaction', endDate);
-
-        const { data: prevDepenses } = await supabase
-          .from('depenses')
-          .select('montant')
-          .gte('date_transaction', startDate)
-          .lte('date_transaction', endDate);
-
-        const totalRecettes = (prevRecettes || []).reduce((acc, r) => acc + Number(r.montant), 0);
-        const totalDepenses = (prevDepenses || []).reduce((acc, d) => acc + Number(d.montant), 0);
-        return totalRecettes - totalDepenses;
-      }
+      const [{ data: rec }, { data: dep }] = await Promise.all([
+        supabase.from('recettes').select('montant').lt('date_transaction', dateDebut),
+        supabase.from('depenses').select('montant').lt('date_transaction', dateDebut),
+      ]);
+      const r = (rec || []).reduce((s, x) => s + Number(x.montant), 0);
+      const d = (dep || []).reduce((s, x) => s + Number(x.montant), 0);
+      return r - d;
     },
     staleTime: 5 * 60 * 1000,
   });
 
-  // Generate sommaire data with optional rubrique filter
-  const sommaireData = useMemo(() => {
-    const baseData = generateSommaire({ dateDebut, dateFin }, soldePrecedent);
-    
-    if (selectedRubrique === 'all') {
-      return baseData;
-    }
-    
-    // Filter by selected rubrique
-    return baseData.filter(row => 
-      row.imp === 'SP' || row.imp === 'R' || row.imp === selectedRubrique
-    );
-  }, [generateSommaire, dateDebut, dateFin, soldePrecedent, selectedRubrique]);
+  // Recettes et dépenses filtrées sur la période
+  const periodRecettes = useMemo(
+    () => recettes.filter(r => r.date_transaction >= dateDebut && r.date_transaction <= dateFin),
+    [recettes, dateDebut, dateFin]
+  );
+  const periodDepenses = useMemo(
+    () => depenses.filter(d => d.date_transaction >= dateDebut && d.date_transaction <= dateFin),
+    [depenses, dateDebut, dateFin]
+  );
 
-  // Generate annual breakdown by month for annual view
-  const annualBreakdown = useMemo(() => {
-    if (viewMode !== 'annuel') return [];
-    
-    return moisNoms.map((moisNom, index) => {
-      const mois = index + 1;
-      const debut = `${selectedAnnee}-${String(mois).padStart(2, '0')}-01`;
-      const lastDay = new Date(selectedAnnee, mois, 0).getDate();
-      const fin = `${selectedAnnee}-${String(mois).padStart(2, '0')}-${lastDay}`;
-      
-      const monthRecettes = recettes
-        .filter(r => r.date_transaction >= debut && r.date_transaction <= fin)
-        .reduce((acc, r) => acc + Number(r.montant), 0);
-      
-      const monthDepenses = depenses
-        .filter(d => d.date_transaction >= debut && d.date_transaction <= fin)
-        .reduce((acc, d) => acc + Number(d.montant), 0);
-      
-      return {
-        mois: moisNom,
-        recettes: monthRecettes,
-        depenses: monthDepenses,
-        solde: monthRecettes - monthDepenses,
-        operations: recettes.filter(r => r.date_transaction >= debut && r.date_transaction <= fin).length +
-                   depenses.filter(d => d.date_transaction >= debut && d.date_transaction <= fin).length
-      };
-    });
-  }, [viewMode, selectedAnnee, recettes, depenses]);
+  // Agrégation des lignes du Sommaire
+  const sommaireRows = useMemo((): SommaireRow[] => {
+    const rows: SommaireRow[] = [];
 
-  // Synthesis by rubrique for synthesis mode
-  const syntheseData = useMemo(() => {
-    if (displayMode !== 'synthese') return [];
-    
-    const filteredRecettes = recettes.filter(r => 
-      r.date_transaction >= dateDebut && r.date_transaction <= dateFin
-    );
-    const filteredDepenses = depenses.filter(d => 
-      d.date_transaction >= dateDebut && d.date_transaction <= dateFin
-    );
-
-    // Group by rubrique
-    const rubriquesMap = new Map<string, { 
-      code: string; 
-      libelle: string; 
-      recettes: number; 
-      depenses: number;
-      operations: number;
-    }>();
-
-    // Recettes (no rubrique, so group under "RECETTES")
-    const totalRecettes = filteredRecettes.reduce((acc, r) => acc + Number(r.montant), 0);
-    if (totalRecettes > 0) {
-      rubriquesMap.set('RECETTES', {
-        code: 'R',
-        libelle: 'Total Recettes',
-        recettes: totalRecettes,
-        depenses: 0,
-        operations: filteredRecettes.length
-      });
-    }
-
-    // Depenses by rubrique
-    filteredDepenses.forEach(d => {
-      const code = d.rubrique?.code || 'AUTRE';
-      const libelle = d.rubrique?.libelle || 'Autres';
-      const existing = rubriquesMap.get(code) || { 
-        code, 
-        libelle, 
-        recettes: 0, 
-        depenses: 0,
-        operations: 0 
-      };
-      existing.depenses += Number(d.montant);
-      existing.operations += 1;
-      rubriquesMap.set(code, existing);
-    });
-
-    return Array.from(rubriquesMap.values())
-      .sort((a, b) => {
-        // Utiliser le tri qui place "Solde du mois (antérieur)" en premier
-        const aIsSolde = a.libelle.includes('Solde du mois (antérieur)');
-        const bIsSolde = b.libelle.includes('Solde du mois (antérieur)');
-        
-        if (aIsSolde && !bIsSolde) return -1;
-        if (!aIsSolde && bIsSolde) return 1;
-        
-        return a.code.localeCompare(b.code);
-      });
-  }, [displayMode, recettes, depenses, dateDebut, dateFin]);
-
-  const etatResultat = useMemo(() => {
-    return calculateEtatResultat({ dateDebut, dateFin }, soldePrecedent);
-  }, [calculateEtatResultat, dateDebut, dateFin, soldePrecedent]);
-
-  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('fr-FR');
-  const getPeriodLabel = () => {
-    if (viewMode === 'annuel') {
-      return `Année ${selectedAnnee}`;
-    }
-    return `${moisNoms[selectedMois - 1]} ${selectedAnnee}`;
-  };
-
-  // Totals
-  const totalRecettes = sommaireData.reduce((acc, row) => acc + row.recettes, 0);
-  const totalDepenses = sommaireData.reduce((acc, row) => acc + row.depenses, 0);
-  const totalGeneral = sommaireData.reduce((acc, row) => acc + row.total, 0);
-
-  // Export handlers
-  const getExportTitle = () => {
-    const modeLabel = viewMode === 'annuel' ? 'Annuel' : 'Mensuel';
-    const displayLabel = displayMode === 'synthese' ? ' (Synthèse)' : '';
-    return `Sommaire ${modeLabel} - ${getPeriodLabel()}${displayLabel}`;
-  };
-
-  const handleExportPDF = async () => {
-    const columns: ExportColumn[] = displayMode === 'synthese' ? [
-      { header: 'Code', key: 'code', width: 15 },
-      { header: 'Libellé', key: 'libelle', width: 40 },
-      { header: 'Recettes', key: 'recettes', width: 25 },
-      { header: 'Dépenses', key: 'depenses', width: 25 },
-      { header: 'Opérations', key: 'operations', width: 15 },
-    ] : [
-      { header: 'IMP', key: 'imp', width: 15 },
-      { header: 'Désignation', key: 'designation', width: 50 },
-      { header: 'Recettes', key: 'recettes', width: 20 },
-      { header: 'Dépenses', key: 'depenses', width: 20 },
-      { header: 'Total', key: 'total', width: 20 },
-      { header: 'Caisse', key: 'caisse', width: 20 },
-      { header: 'Balance', key: 'balance', width: 20 },
-    ];
-
-    const data = displayMode === 'synthese' 
-      ? syntheseData.map(s => ({ ...s, imp: s.code, designation: s.libelle, total: s.recettes - s.depenses, caisse: 0, balance: 0 }))
-      : sommaireData;
-    const filename = `sommaire_${viewMode}_${selectedAnnee}${viewMode === 'mensuel' ? `_${moisNoms[selectedMois - 1].toLowerCase()}` : ''}`;
-
-    await exportToPDF({
-      title: getExportTitle(),
-      filename,
-      subtitle: `Période: ${formatDate(dateDebut)} au ${formatDate(dateFin)} | Solde: ${numberToFrenchWords(Math.floor(Math.abs(etatResultat.balance)))} Francs Congolais`,
-      columns,
-      data: displayMode === 'synthese' ? syntheseData : sommaireData,
-    });
-  };
-
-  const handleExportExcel = () => {
-    const columns: ExportColumn[] = displayMode === 'synthese' ? [
-      { header: 'Code', key: 'code', width: 12 },
-      { header: 'Libellé', key: 'libelle', width: 40 },
-      { header: 'Recettes (FC)', key: 'recettes', width: 18 },
-      { header: 'Dépenses (FC)', key: 'depenses', width: 18 },
-      { header: 'Opérations', key: 'operations', width: 12 },
-    ] : [
-      { header: 'IMP', key: 'imp', width: 10 },
-      { header: 'Désignation', key: 'designation', width: 40 },
-      { header: 'Recettes (FC)', key: 'recettes', width: 18 },
-      { header: 'Dépenses (FC)', key: 'depenses', width: 18 },
-      { header: 'Total', key: 'total', width: 18 },
-      { header: 'Caisse', key: 'caisse', width: 18 },
-      { header: 'Balance', key: 'balance', width: 18 },
-    ];
-
-    const filename = `sommaire_${viewMode}_${selectedAnnee}${viewMode === 'mensuel' ? `_${moisNoms[selectedMois - 1].toLowerCase()}` : ''}`;
-
-    exportToExcel({
-      title: getExportTitle(),
-      filename,
-      subtitle: `Solde en lettres: ${numberToFrenchWords(Math.floor(Math.abs(etatResultat.balance)))} Francs Congolais`,
-      columns,
-      data: displayMode === 'synthese' ? syntheseData : sommaireData,
-    });
-  };
-
-  const handleExportWord = () => {
-    const tableColumns = displayMode === 'synthese' ? [
-      { header: 'Code', key: 'code', type: 'text' as const },
-      { header: 'Libellé', key: 'libelle', type: 'text' as const },
-      { header: 'Recettes', key: 'recettes', type: 'currency' as const },
-      { header: 'Dépenses', key: 'depenses', type: 'currency' as const },
-      { header: 'Opérations', key: 'operations', type: 'number' as const },
-    ] : [
-      { header: 'IMP', key: 'imp', type: 'text' as const },
-      { header: 'Désignation', key: 'designation', type: 'text' as const },
-      { header: 'Recettes', key: 'recettes', type: 'currency' as const },
-      { header: 'Dépenses', key: 'depenses', type: 'currency' as const },
-      { header: 'Total', key: 'total', type: 'currency' as const },
-      { header: 'Caisse', key: 'caisse', type: 'currency' as const },
-      { header: 'Balance', key: 'balance', type: 'currency' as const },
-    ];
-
-    const summaryHTML = generateSummaryHTML([
-      { label: 'Total Recettes', value: totalRecettes, type: 'success' },
-      { label: 'Total Dépenses', value: totalDepenses, type: 'danger' },
-      { label: 'Balance Finale', value: etatResultat.balance, type: 'info' },
-    ]);
-
-    const exportData = displayMode === 'synthese' 
-      ? syntheseData.map(s => ({ 
-          imp: s.code, 
-          designation: s.libelle, 
-          recettes: s.recettes, 
-          depenses: s.depenses, 
-          total: s.recettes - s.depenses, 
-          caisse: 0, 
-          balance: 0,
-          operations: s.operations 
-        }))
-      : sommaireData;
-
-    const tableHTML = generateTableHTML(
-      tableColumns, 
-      exportData as any, 
-      {
-        showTotals: true,
-        totalsLabel: 'TOTAUX',
-        totalsColumns: ['recettes', 'depenses', displayMode === 'synthese' ? 'operations' : 'total'],
+    // ── RECETTES : groupées par (imp, libellé) ──────────────────────────────
+    const recetteMap = new Map<string, SommaireRow>();
+    for (const r of periodRecettes) {
+      const imp = (r.imp || '707820').trim();
+      const parts = [r.motif, r.provenance].filter(Boolean);
+      const designation = parts.join(' – ') || r.libelle || 'Recette';
+      const key = `${imp}|${designation.toLowerCase()}`;
+      if (recetteMap.has(key)) {
+        recetteMap.get(key)!.recette += Number(r.montant);
+      } else {
+        recetteMap.set(key, { type: 'recette', imp, designation, recette: Number(r.montant), depense: 0 });
       }
+    }
+    const recetteRows = [...recetteMap.values()].sort((a, b) =>
+      a.imp !== b.imp ? a.imp.localeCompare(b.imp) : a.designation.localeCompare(b.designation)
     );
+    rows.push(...recetteRows);
 
-    const montantLettres = `<div class="montant-lettres">
-      <strong>Solde en lettres:</strong> ${numberToFrenchWords(Math.floor(Math.abs(etatResultat.balance)))} Francs Congolais
-    </div>`;
+    // ── DEPENSES : codes IMP fixes ──────────────────────────────────────────
+    const fixedDepMap = new Map<string, SommaireRow>();
+    for (const imp of Object.keys(DEPENSES_IMP_MAP)) {
+      fixedDepMap.set(imp, { type: 'depense', imp, designation: DEPENSES_IMP_MAP[imp], recette: 0, depense: 0 });
+    }
 
-    const filename = `sommaire_${viewMode}_${selectedAnnee}${viewMode === 'mensuel' ? `_${moisNoms[selectedMois - 1].toLowerCase()}` : ''}`;
+    // 000000 par sous-catégorie motif
+    const dep000Map = new Map<string, SommaireRow>();
+    // Codes inconnus
+    const otherDepMap = new Map<string, SommaireRow>();
 
-    exportToWord({
-      title: getExportTitle(),
-      filename,
-      content: `
-        <div class="subtitle">Période: ${formatDate(dateDebut)} au ${formatDate(dateFin)}</div>
-        ${summaryHTML}
-        ${tableHTML}
-        ${montantLettres}
-      `,
+    for (const d of periodDepenses) {
+      const imp = (d.imp_code || '000000').trim();
+      const montant = Number(d.montant);
+      if (fixedDepMap.has(imp)) {
+        fixedDepMap.get(imp)!.depense += montant;
+      } else if (imp === '000000') {
+        const designation = matchDepense000000(d.motif || '');
+        if (dep000Map.has(designation)) {
+          dep000Map.get(designation)!.depense += montant;
+        } else {
+          dep000Map.set(designation, { type: 'depense', imp: '000000', designation, recette: 0, depense: montant });
+        }
+      } else {
+        if (otherDepMap.has(imp)) {
+          otherDepMap.get(imp)!.depense += montant;
+        } else {
+          otherDepMap.set(imp, { type: 'depense', imp, designation: `Code ${imp}`, recette: 0, depense: montant });
+        }
+      }
+    }
+
+    // Ajouter les lignes dépenses fixes (montant > 0 seulement)
+    for (const row of fixedDepMap.values()) {
+      if (row.depense > 0) rows.push(row);
+    }
+
+    // Ajouter les 000000 dans l'ordre des buckets
+    const bucketOrder = DEPENSES_000000_BUCKETS.map(b => b.designation);
+    const sorted000 = [...dep000Map.values()].sort((a, b) => {
+      const ai = bucketOrder.indexOf(a.designation);
+      const bi = bucketOrder.indexOf(b.designation);
+      if (ai === -1 && bi === -1) return a.designation.localeCompare(b.designation);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+    for (const row of sorted000) {
+      if (row.depense > 0) rows.push(row);
+    }
+
+    // Ajouter tout code inconnu restant
+    for (const row of otherDepMap.values()) {
+      if (row.depense > 0) rows.push(row);
+    }
+
+    return rows;
+  }, [periodRecettes, periodDepenses]);
+
+  // Totaux
+  const totalRecettesLignes = useMemo(
+    () => sommaireRows.filter(r => r.type === 'recette').reduce((s, r) => s + r.recette, 0),
+    [sommaireRows]
+  );
+  const totalDepenses = useMemo(
+    () => sommaireRows.filter(r => r.type === 'depense').reduce((s, r) => s + r.depense, 0),
+    [sommaireRows]
+  );
+  const totalRecettes = soldePrecedent + totalRecettesLignes;
+  const encaisse = totalRecettes - totalDepenses;
+  const balance = totalDepenses + encaisse; // = totalRecettes
+
+  // ── HTML EXPORT ────────────────────────────────────────────────────────────
+
+  const buildSommaireHTML = (forPrint = true): string => {
+    const moisLabel = MOIS_NOMS[exportMois - 1];
+    const comptable = nomComptable.trim() || '____________________';
+    const encaisseEnLettres = `${numberToFrenchWords(Math.floor(Math.abs(encaisse)))} Francs Congolais`;
+
+    const tdStyle = 'border:1px solid #000;padding:2px 5px;font-weight:bold;font-size:9pt';
+    const tdC = `${tdStyle};text-align:center`;
+    const tdR = `${tdStyle};text-align:right`;
+
+    const soldePrecedentRow = `
+      <tr>
+        <td style="${tdC}">707820</td>
+        <td style="${tdStyle}">Solde du mois antérieur</td>
+        <td style="${tdR}">${formatMontant(soldePrecedent)}</td>
+        <td style="${tdR}"></td>
+      </tr>`;
+
+    const recetteRowsHTML = sommaireRows
+      .filter(r => r.type === 'recette')
+      .map(row => `
+      <tr>
+        <td style="${tdC}">${row.imp}</td>
+        <td style="${tdStyle}">${row.designation}</td>
+        <td style="${tdR}">${formatMontant(row.recette)}</td>
+        <td style="${tdR}"></td>
+      </tr>`)
+      .join('');
+
+    const depenseRowsHTML = sommaireRows
+      .filter(r => r.type === 'depense')
+      .map(row => `
+      <tr>
+        <td style="${tdC}">${row.imp}</td>
+        <td style="${tdStyle}">${row.designation}</td>
+        <td style="${tdR}"></td>
+        <td style="${tdR}">${formatMontant(row.depense)}</td>
+      </tr>`)
+      .join('');
+
+    const header = forPrint
+      ? `<div style="text-align:center;margin-bottom:8px">
+          <img src="${HEADER_IMAGE_BASE64}" style="width:100%;max-width:700px;height:auto" alt="En-tête DGDA" />
+        </div>`
+      : '';
+
+    return `
+      ${header}
+      <p style="font-weight:bold;font-size:11pt;margin:4px 0;text-align:center;font-family:'Courier New',monospace">
+        SOMMAIRE DU MOIS DE ${moisLabel.toUpperCase()} ${exportAnnee}
+      </p>
+      <p style="font-size:10pt;margin:2px 0;text-align:center;font-family:'Courier New',monospace">
+        Direction Provinciale Kinshasa-Ville
+      </p>
+      <p style="font-size:10pt;margin:2px 0 10px 0;text-align:center;font-family:'Courier New',monospace">
+        DGDA/3400/DP/KV/SDAF/&nbsp;&nbsp;/${exportAnnee}
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:10pt">
+        <thead>
+          <tr>
+            <th style="border:1px solid #000;padding:2px 5px;text-align:center;width:65px">IMP.</th>
+            <th style="border:1px solid #000;padding:2px 5px;text-align:center">DESIGNATION</th>
+            <th style="border:1px solid #000;padding:2px 5px;text-align:center" colspan="2">MONTANTS</th>
+          </tr>
+          <tr>
+            <th colspan="2" style="border:1px solid #000;padding:2px 5px"></th>
+            <th style="border:1px solid #000;padding:2px 5px;text-align:center;width:130px">RECETTES</th>
+            <th style="border:1px solid #000;padding:2px 5px;text-align:center;width:130px">DEPENSES</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${soldePrecedentRow}
+          ${recetteRowsHTML}
+          ${depenseRowsHTML}
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:bold">
+            <td colspan="2" style="border:1px solid #000;padding:2px 5px;text-align:right">TOTAL :</td>
+            <td style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(totalRecettes)}</td>
+            <td style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(totalDepenses)}</td>
+          </tr>
+          <tr style="font-weight:bold">
+            <td colspan="2" style="border:1px solid #000;padding:2px 5px;text-align:right">ENCAISSE :</td>
+            <td colspan="2" style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(encaisse)}</td>
+          </tr>
+          <tr style="font-weight:bold">
+            <td colspan="2" style="border:1px solid #000;padding:2px 5px;text-align:right">BALANCE :</td>
+            <td style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(balance)}</td>
+            <td style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(balance)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <div style="margin-top:10px;font-weight:bold;font-family:'Courier New',monospace;font-size:10pt;word-wrap:break-word">
+        <span>Nous disons :&nbsp;&nbsp;</span>${encaisseEnLettres}
+      </div>
+      <div style="page-break-inside:avoid;font-family:'Courier New',monospace;font-size:10pt">
+        <p style="text-align:right;margin-top:16px">Fait à Kinshasa, le ${dateFeuille}</p>
+        <p style="text-align:right;margin-top:10px;font-weight:bold">COMPTABLE PROVINCIALE DES DEPENSES</p>
+        <p style="text-align:right;margin-top:8px;font-weight:bold">${comptable}</p>
+      </div>
+      <div style="margin-top:30px;text-align:center">
+        <img src="${FOOTER_IMAGE_BASE64}" style="width:100%;max-width:700px;height:auto" alt="Pied de page DGDA" />
+      </div>
+    `;
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write('<html><head><title>Sommaire DGDA</title>');
+    printWindow.document.write(
+      `<style>body{font-family:"Courier New",monospace;font-size:10pt;margin:20px;position:relative}` +
+      `table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:2px 5px}` +
+      `.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);opacity:0.06;` +
+      `pointer-events:none;z-index:-1;width:500px;height:500px}` +
+      `@media print{.watermark{position:fixed}}</style>`
+    );
+    printWindow.document.write('</head><body>');
+    printWindow.document.write(`<img class="watermark" src="${FILIGRANE_IMAGE}" alt="" />`);
+    printWindow.document.write(buildSommaireHTML(true));
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const handlePDFExport = () => {
+    const moisLabel = MOIS_NOMS[exportMois - 1];
+    const encaisseEnLettres = `${numberToFrenchWords(Math.floor(Math.abs(encaisse)))} Francs Congolais`;
+    exportSommairePDF({
+      rows: sommaireRows,
+      soldePrecedent,
+      moisLabel,
+      annee: exportAnnee,
+      dateFeuille,
+      nomComptable: nomComptable.trim() || '____________________',
+      encaisseEnLettres,
     });
   };
 
-  const loading = isLoading || loadingBalance;
+  const handleWordExport = () => {
+    const moisLabel = MOIS_NOMS[exportMois - 1];
+    exportToWord({
+      title: `SOMMAIRE — MOIS DE ${moisLabel.toUpperCase()} ${exportAnnee}`,
+      filename: `sommaire_${moisLabel.toLowerCase()}_${exportAnnee}`,
+      content: buildSommaireHTML(false),
+      headerLines: [
+        'République Démocratique du Congo',
+        'Ministère des Finances',
+        'Direction Générale des Douanes et Accises',
+        'Direction Provinciale de Kinshasa',
+      ],
+    });
+  };
 
-  // Clear filter
-  const clearRubriqueFilter = () => setSelectedRubrique('all');
+  // ── RENDER ─────────────────────────────────────────────────────────────────
+
+  const recetteRows = sommaireRows.filter(r => r.type === 'recette');
+  const depenseRows = sommaireRows.filter(r => r.type === 'depense');
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 space-y-4">
       <PageHeader
-        title="Rapport Sommaire"
-        description="Résumé des opérations par catégorie"
-        actions={
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={() => window.print()}>
-              <Printer className="w-4 h-4 mr-2" />
-              Imprimer
-            </Button>
-            <Button variant="outline" onClick={handleExportPDF}>
-              <FileText className="w-4 h-4 mr-2" />
-              PDF
-            </Button>
-            <Button variant="outline" onClick={handleExportExcel}>
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Excel
-            </Button>
-            <Button variant="outline" onClick={handleExportWord}>
-              <FileDown className="w-4 h-4 mr-2" />
-              Word
-            </Button>
-          </div>
-        }
+        title="Sommaire"
+        description="Récapitulatif mensuel des recettes et dépenses par code IMP"
       />
 
-      {/* Filters Card */}
+      {/* Filtres */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap items-end gap-4">
-            {/* Period Selection */}
-            <div className="space-y-2">
-              <Label>Mode de visualisation</Label>
-              <Select value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-                <SelectTrigger className="w-40">
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="space-y-1">
+              <Label>Mois</Label>
+              <Select value={String(selectedMois)} onValueChange={v => setSelectedMois(Number(v))}>
+                <SelectTrigger className="w-36">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="mensuel">Mensuel</SelectItem>
-                  <SelectItem value="annuel">Annuel</SelectItem>
+                  {MOIS_NOMS.map((nom, idx) => (
+                    <SelectItem key={idx + 1} value={String(idx + 1)}>{nom}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-
-            {viewMode === 'mensuel' && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  Mois
-                </Label>
-                <select
-                  value={selectedMois}
-                  onChange={(e) => setSelectedMois(Number(e.target.value))}
-                  className="flex h-10 w-40 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  aria-label="Sélectionner le mois"
-                >
-                  {moisNoms.map((mois, index) => (
-                    <option key={index} value={index + 1}>{mois}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Année</Label>
+              <Select value={String(selectedAnnee)} onValueChange={v => setSelectedAnnee(Number(v))}>
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2023, 2024, 2025, 2026].map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={() => { setExportMois(selectedMois); setExportAnnee(selectedAnnee); setExportDialogOpen(true); }} className="ml-auto gap-2">
+              <FileDown className="w-4 h-4" />
+              Exporter Rapport Officiel
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tableau principal */}
+      {isLoading ? (
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              SOMMAIRE DU MOIS DE {MOIS_NOMS[selectedMois - 1].toUpperCase()} {selectedAnnee}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="font-bold text-center w-20 border-r">IMP.</TableHead>
+                  <TableHead className="font-bold border-r">DESIGNATION</TableHead>
+                  <TableHead className="font-bold text-right w-40 border-r">RECETTES</TableHead>
+                  <TableHead className="font-bold text-right w-40">DEPENSES</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {/* Solde antérieur */}
+                <TableRow className="bg-muted/30">
+                  <TableCell className="font-bold text-center border-r">707820</TableCell>
+                  <TableCell className="font-bold border-r">Solde du mois antérieur</TableCell>
+                  <TableCell className="font-bold text-right border-r text-green-700">
+                    {formatMontant(soldePrecedent)}
+                  </TableCell>
+                  <TableCell className="font-bold text-right" />
+                </TableRow>
+                {/* Recettes */}
+                {recetteRows.map((row, i) => (
+                  <TableRow key={`r-${i}`}>
+                    <TableCell className="font-bold text-center border-r">{row.imp}</TableCell>
+                    <TableCell className="font-bold border-r">{row.designation}</TableCell>
+                    <TableCell className="font-bold text-right border-r text-green-700">
+                      {formatMontant(row.recette)}
+                    </TableCell>
+                    <TableCell className="font-bold text-right" />
+                  </TableRow>
+                ))}
+                {/* Dépenses */}
+                {depenseRows.map((row, i) => (
+                  <TableRow key={`d-${i}`}>
+                    <TableCell className="font-bold text-center border-r">{row.imp}</TableCell>
+                    <TableCell className="font-bold border-r">{row.designation}</TableCell>
+                    <TableCell className="font-bold text-right border-r" />
+                    <TableCell className="font-bold text-right text-red-700">
+                      {formatMontant(row.depense)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={2} className="text-right font-bold border-r">TOTAL :</TableCell>
+                  <TableCell className="text-right font-bold border-r">{formatMontant(totalRecettes)}</TableCell>
+                  <TableCell className="text-right font-bold">{formatMontant(totalDepenses)}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell colSpan={2} className="text-right font-bold border-r">ENCAISSE :</TableCell>
+                  <TableCell colSpan={2} className="text-right font-bold">{formatMontant(encaisse)}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell colSpan={2} className="text-right font-bold border-r">BALANCE :</TableCell>
+                  <TableCell className="text-right font-bold border-r">{formatMontant(balance)}</TableCell>
+                  <TableCell className="text-right font-bold">{formatMontant(balance)}</TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Dialog d'export */}
+      <Dialog open={exportDialogOpen} onOpenChange={v => !v && setExportDialogOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Exporter Sommaire Officiel
+            </DialogTitle>
+            <DialogDescription>
+              Renseignez les informations avant d'exporter le rapport Sommaire
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="dateSommaire">Date du Sommaire</Label>
               <Input
+                id="dateSommaire"
+                value={dateFeuille}
+                onChange={e => setDateFeuille(e.target.value)}
+                placeholder="JJ/MM/AAAA"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Mois</Label>
+              <Select value={String(exportMois)} onValueChange={v => setExportMois(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MOIS_NOMS.map((nom, idx) => (
+                    <SelectItem key={idx + 1} value={String(idx + 1)}>{nom}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="exportAnnee">Année</Label>
+              <Input
+                id="exportAnnee"
                 type="number"
-                value={selectedAnnee}
-                onChange={(e) => setSelectedAnnee(Number(e.target.value))}
-                className="w-28"
+                value={exportAnnee}
+                onChange={e => setExportAnnee(Number(e.target.value))}
                 min={2020}
                 max={2030}
               />
             </div>
-
-            {/* Display Mode */}
             <div className="space-y-2">
-              <Label>Affichage</Label>
-              <div className="flex gap-1">
-                <Button
-                  variant={displayMode === 'detail' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setDisplayMode('detail')}
-                >
-                  <List className="w-4 h-4 mr-1" />
-                  Détail
-                </Button>
-                <Button
-                  variant={displayMode === 'synthese' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setDisplayMode('synthese')}
-                >
-                  <LayoutGrid className="w-4 h-4 mr-1" />
-                  Synthèse
-                </Button>
-              </div>
-            </div>
-
-            {/* Rubrique Filter */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Filter className="w-4 h-4" />
-                Rubrique
-              </Label>
-              <Select value={selectedRubrique} onValueChange={setSelectedRubrique}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Toutes les rubriques" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les rubriques</SelectItem>
-                  {rubriques.map(r => (
-                    <SelectItem key={r.id} value={r.code}>{r.code} - {r.libelle}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Show Solde Details Toggle */}
-            <div className="flex items-center gap-2 ml-auto">
-              <Switch
-                checked={showSoldeDetails}
-                onCheckedChange={setShowSoldeDetails}
-                id="show-solde"
+              <Label htmlFor="nomComptable">Nom du Comptable</Label>
+              <Input
+                id="nomComptable"
+                value={nomComptable}
+                onChange={e => setNomComptable(e.target.value)}
+                placeholder="Nom du comptable provincial"
               />
-              <Label htmlFor="show-solde" className="text-sm">Détails solde</Label>
             </div>
           </div>
-
-          {/* Active Filters */}
-          {selectedRubrique !== 'all' && (
-            <div className="flex gap-2 mt-4 pt-4 border-t">
-              <Badge variant="secondary" className="flex items-center gap-1">
-                Rubrique: {selectedRubrique}
-                <button 
-                  onClick={clearRubriqueFilter} 
-                  className="ml-1 hover:text-destructive"
-                  aria-label="Effacer le filtre de rubrique"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Summary Cards */}
-      {showSoldeDetails && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card className="border-l-4 border-l-muted-foreground">
-            <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">Solde Précédent</p>
-              <p className="text-xl font-bold">{formatMontant(soldePrecedent, { showCurrency: true })}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-success">
-            <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">Total Recettes</p>
-              <p className="text-xl font-bold text-success">{formatMontant(etatResultat.totalRecettes, { showCurrency: true })}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-destructive">
-            <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">Total Dépenses</p>
-              <p className="text-xl font-bold text-destructive">{formatMontant(etatResultat.totalDepenses, { showCurrency: true })}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-warning">
-            <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">Encaisse Période</p>
-              <p className={`text-xl font-bold ${etatResultat.encaisse >= 0 ? 'text-success' : 'text-destructive'}`}>
-                {formatMontant(etatResultat.encaisse, { showCurrency: true })}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-info">
-            <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">Balance Finale</p>
-              <p className={`text-xl font-bold ${etatResultat.balance >= 0 ? 'text-info' : 'text-destructive'}`}>
-                {formatMontant(etatResultat.balance, { showCurrency: true })}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Main Content - Tabs for Annual View */}
-      {viewMode === 'annuel' ? (
-        <Tabs defaultValue="synthese" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="synthese">
-              Synthèse Annuelle
-              <Badge variant="secondary" className="ml-2">{selectedAnnee}</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="mensuel">
-              Détail par Mois
-              <Badge variant="outline" className="ml-2">12</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="rubriques">
-              Par Rubrique
-              <Badge variant="outline" className="ml-2">{syntheseData.length}</Badge>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="synthese">
-            <Card>
-              <CardHeader>
-                <CardTitle>Sommaire Annuel - {selectedAnnee}</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Solde en lettres: <span className="font-medium">{numberToFrenchWords(Math.floor(Math.abs(etatResultat.balance)))} Francs Congolais</span>
-                </p>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-16">IMP</TableHead>
-                          <TableHead>Désignation</TableHead>
-                          <TableHead className="text-right">Recettes (FC)</TableHead>
-                          <TableHead className="text-right">Dépenses (FC)</TableHead>
-                          <TableHead className="text-right">Total</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {sommaireData.map((row, index) => (
-                          <TableRow key={index} className={row.imp === 'SP' ? 'bg-muted/50 font-medium' : 'hover:bg-muted/30'}>
-                            <TableCell className="font-mono">{row.imp}</TableCell>
-                            <TableCell>{row.designation}</TableCell>
-                            <TableCell className="text-right text-success">
-                              {row.recettes > 0 ? formatMontant(row.recettes) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right text-destructive">
-                              {row.depenses > 0 ? formatMontant(row.depenses) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right">{formatMontant(row.total)}</TableCell>
-                            <TableCell className="text-right font-bold">{formatMontant(row.balance)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                      <TableFooter>
-                        <TableRow className="bg-muted font-bold">
-                          <TableCell colSpan={2}>TOTAUX ANNUELS</TableCell>
-                          <TableCell className="text-right text-success">{formatMontant(etatResultat.totalRecettes)}</TableCell>
-                          <TableCell className="text-right text-destructive">{formatMontant(etatResultat.totalDepenses)}</TableCell>
-                          <TableCell className="text-right">{formatMontant(etatResultat.encaisse)}</TableCell>
-                          <TableCell className={`text-right ${etatResultat.balance >= 0 ? 'text-info' : 'text-destructive'}`}>
-                            {formatMontant(etatResultat.balance)}
-                          </TableCell>
-                        </TableRow>
-                      </TableFooter>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="mensuel">
-            <Card>
-              <CardHeader>
-                <CardTitle>Répartition Mensuelle - {selectedAnnee}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Mois</TableHead>
-                        <TableHead className="text-right">Recettes (FC)</TableHead>
-                        <TableHead className="text-right">Dépenses (FC)</TableHead>
-                        <TableHead className="text-right">Solde</TableHead>
-                        <TableHead className="text-center">Opérations</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {annualBreakdown.map((month, index) => (
-                        <TableRow key={index} className={month.operations === 0 ? 'text-muted-foreground' : ''}>
-                          <TableCell className="font-medium">{month.mois}</TableCell>
-                          <TableCell className="text-right text-success">
-                            {month.recettes > 0 ? formatMontant(month.recettes) : '-'}
-                          </TableCell>
-                          <TableCell className="text-right text-destructive">
-                            {month.depenses > 0 ? formatMontant(month.depenses) : '-'}
-                          </TableCell>
-                          <TableCell className={`text-right font-medium ${month.solde >= 0 ? 'text-success' : 'text-destructive'}`}>
-                            {formatMontant(month.solde)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={month.operations > 0 ? 'secondary' : 'outline'}>
-                              {month.operations}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    <TableFooter>
-                      <TableRow className="bg-muted font-bold">
-                        <TableCell>TOTAL ANNUEL</TableCell>
-                        <TableCell className="text-right text-success">
-                          {formatMontant(annualBreakdown.reduce((acc, m) => acc + m.recettes, 0))}
-                        </TableCell>
-                        <TableCell className="text-right text-destructive">
-                          {formatMontant(annualBreakdown.reduce((acc, m) => acc + m.depenses, 0))}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatMontant(annualBreakdown.reduce((acc, m) => acc + m.solde, 0))}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge>{annualBreakdown.reduce((acc, m) => acc + m.operations, 0)}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    </TableFooter>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="rubriques">
-            <Card>
-              <CardHeader>
-                <CardTitle>Synthèse par Rubrique - {selectedAnnee}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Code</TableHead>
-                        <TableHead>Libellé</TableHead>
-                        <TableHead className="text-right">Recettes (FC)</TableHead>
-                        <TableHead className="text-right">Dépenses (FC)</TableHead>
-                        <TableHead className="text-center">Opérations</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {syntheseData.map((row, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-mono font-medium">{row.code}</TableCell>
-                          <TableCell>{row.libelle}</TableCell>
-                          <TableCell className="text-right text-success">
-                            {row.recettes > 0 ? formatMontant(row.recettes) : '-'}
-                          </TableCell>
-                          <TableCell className="text-right text-destructive">
-                            {row.depenses > 0 ? formatMontant(row.depenses) : '-'}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="secondary">{row.operations}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    <TableFooter>
-                      <TableRow className="bg-muted font-bold">
-                        <TableCell colSpan={2}>TOTAUX</TableCell>
-                        <TableCell className="text-right text-success">
-                          {formatMontant(syntheseData.reduce((acc, r) => acc + r.recettes, 0))}
-                        </TableCell>
-                        <TableCell className="text-right text-destructive">
-                          {formatMontant(syntheseData.reduce((acc, r) => acc + r.depenses, 0))}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge>{syntheseData.reduce((acc, r) => acc + r.operations, 0)}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    </TableFooter>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      ) : (
-        /* Monthly View - Single Table */
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {displayMode === 'synthese' ? 'Synthèse' : 'Sommaire'} - {getPeriodLabel()}
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Solde en lettres: <span className="font-medium">{numberToFrenchWords(Math.floor(Math.abs(etatResultat.balance)))} Francs Congolais</span>
-            </p>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : displayMode === 'synthese' ? (
-              /* Synthese Mode */
-              syntheseData.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  Aucune donnée pour cette période
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Code</TableHead>
-                        <TableHead>Libellé</TableHead>
-                        <TableHead className="text-right">Recettes (FC)</TableHead>
-                        <TableHead className="text-right">Dépenses (FC)</TableHead>
-                        <TableHead className="text-center">Opérations</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {syntheseData.map((row, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-mono font-medium">{row.code}</TableCell>
-                          <TableCell>{row.libelle}</TableCell>
-                          <TableCell className="text-right text-success">
-                            {row.recettes > 0 ? formatMontant(row.recettes) : '-'}
-                          </TableCell>
-                          <TableCell className="text-right text-destructive">
-                            {row.depenses > 0 ? formatMontant(row.depenses) : '-'}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="secondary">{row.operations}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    <TableFooter>
-                      <TableRow className="bg-muted font-bold">
-                        <TableCell colSpan={2}>TOTAUX</TableCell>
-                        <TableCell className="text-right text-success">
-                          {formatMontant(syntheseData.reduce((acc, r) => acc + r.recettes, 0))}
-                        </TableCell>
-                        <TableCell className="text-right text-destructive">
-                          {formatMontant(syntheseData.reduce((acc, r) => acc + r.depenses, 0))}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge>{syntheseData.reduce((acc, r) => acc + r.operations, 0)}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    </TableFooter>
-                  </Table>
-                </div>
-              )
-            ) : (
-              /* Detail Mode */
-              sommaireData.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  Aucune donnée pour cette période
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-16">IMP</TableHead>
-                        <TableHead>Désignation</TableHead>
-                        <TableHead className="text-right">Recettes (FC)</TableHead>
-                        <TableHead className="text-right">Dépenses (FC)</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
-                        <TableHead className="text-right">Caisse</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sommaireData.map((row, index) => (
-                        <TableRow key={index} className={row.imp === 'SP' ? 'bg-muted/50 font-medium' : 'hover:bg-muted/30'}>
-                          <TableCell className="font-mono">{row.imp}</TableCell>
-                          <TableCell>{row.designation}</TableCell>
-                          <TableCell className="text-right text-success">
-                            {row.recettes > 0 ? formatMontant(row.recettes) : '-'}
-                          </TableCell>
-                          <TableCell className="text-right text-destructive">
-                            {row.depenses > 0 ? formatMontant(row.depenses) : '-'}
-                          </TableCell>
-                          <TableCell className="text-right">{formatMontant(row.total)}</TableCell>
-                          <TableCell className="text-right">{formatMontant(row.caisse)}</TableCell>
-                          <TableCell className="text-right font-bold">{formatMontant(row.balance)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    <TableFooter>
-                      <TableRow className="bg-muted font-bold">
-                        <TableCell colSpan={2}>TOTAUX</TableCell>
-                        <TableCell className="text-right text-success">{formatMontant(totalRecettes)}</TableCell>
-                        <TableCell className="text-right text-destructive">{formatMontant(totalDepenses)}</TableCell>
-                        <TableCell className="text-right">{formatMontant(totalGeneral)}</TableCell>
-                        <TableCell></TableCell>
-                        <TableCell className={`text-right ${etatResultat.balance >= 0 ? 'text-info' : 'text-destructive'}`}>
-                          {formatMontant(etatResultat.balance)}
-                        </TableCell>
-                      </TableRow>
-                    </TableFooter>
-                  </Table>
-                </div>
-              )
-            )}
-          </CardContent>
-        </Card>
-      )}
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => { handleWordExport(); setExportDialogOpen(false); }}
+              className="gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              Word
+            </Button>
+            <Button
+              onClick={() => { handlePDFExport(); setExportDialogOpen(false); }}
+              className="gap-2"
+            >
+              <FileDown className="w-4 h-4" />
+              PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

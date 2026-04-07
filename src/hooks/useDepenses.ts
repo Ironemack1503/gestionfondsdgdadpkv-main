@@ -11,6 +11,8 @@ export interface Depense {
   id: string;
   numero_bon: number;  // N°d'ord (Auto)
   numero_beo?: string | null;  // N°BEO (4 chiffres)
+  NBEO?: string | null;         // N°BEO depuis Access DepensesF
+  imp_code?: string | null;     // Code IMP depuis MouvementsF Access (source PDF)
   rubrique_id?: string | null;  // Référence à la rubrique
   service_id?: string | null;
   date?: string;  // Alias pour compatibilité
@@ -50,6 +52,8 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
   // Hook unifié : mode local (CSV) ou Supabase avec pagination
   const { data: depenses = [], isLoading, error } = useQuery({
     queryKey: ['depenses', useLocal, page, pageSize],
+    staleTime: 0,       // toujours re-vérifier (pas de cache périmé)
+    gcTime: 60 * 1000,  // garder en mémoire 1 minute max
     queryFn: async () => {
       if (useLocal) {
         // Charge tout le CSV et applique la pagination côté client
@@ -67,7 +71,10 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
         const { data, error } = await supabase
           .from('depenses')
           .select(`
-            *,
+            id, numero_bon, rubrique_id, date_transaction, heure,
+            beneficiaire, motif, montant, montant_lettre, observation,
+            user_id, created_at, updated_at, libelle,
+            "NBEO", imp_code,
             rubrique:rubriques(id, code, libelle)
           `)
           .order('date_transaction', { ascending: false })
@@ -97,7 +104,10 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
     const { data, error } = await supabase
       .from('depenses')
       .select(`
-        *,
+        id, numero_bon, rubrique_id, date_transaction, heure,
+        beneficiaire, motif, montant, montant_lettre, observation,
+        user_id, created_at, updated_at, libelle,
+        "NBEO", imp_code,
         rubrique:rubriques(id, code, libelle)
       `)
       .order('date_transaction', { ascending: false })

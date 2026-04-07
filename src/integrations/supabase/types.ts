@@ -157,6 +157,8 @@ export type Database = {
           statut: Database["public"]["Enums"]["transaction_status"]
           updated_at: string
           user_id: string
+          NBEO: string | null
+          imp_code: string | null
         }
         Insert: {
           annee?: number | null
@@ -187,6 +189,8 @@ export type Database = {
           statut?: Database["public"]["Enums"]["transaction_status"]
           updated_at?: string
           user_id: string
+          NBEO?: string | null
+          imp_code?: string | null
         }
         Update: {
           annee?: number | null
@@ -217,6 +221,8 @@ export type Database = {
           statut?: Database["public"]["Enums"]["transaction_status"]
           updated_at?: string
           user_id?: string
+          NBEO?: string | null
+          imp_code?: string | null
         }
         Relationships: [
           {

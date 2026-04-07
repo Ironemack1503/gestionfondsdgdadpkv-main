@@ -27,6 +27,19 @@ import { useSoldeMoisAnterieurs } from "@/hooks/useSoldeMoisAnterieurs";
 import { sortRubriquesWithSoldeFirst } from "@/lib/rubriquesSortUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRubriquesStats } from "@/hooks/useRubriquesStats";
+
+const MOIS_LABELS = [
+  { value: 1, label: 'Janvier' }, { value: 2, label: 'Février' },
+  { value: 3, label: 'Mars' },    { value: 4, label: 'Avril' },
+  { value: 5, label: 'Mai' },     { value: 6, label: 'Juin' },
+  { value: 7, label: 'Juillet' }, { value: 8, label: 'Août' },
+  { value: 9, label: 'Septembre' },{ value: 10, label: 'Octobre' },
+  { value: 11, label: 'Novembre' },{ value: 12, label: 'Décembre' },
+];
+
+const formatMontant = (val: number): string =>
+  val > 0 ? val.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
 
 // Fonction pour générer un UUID simple
 const generateUUID = (): string => {
@@ -45,9 +58,21 @@ export default function RubriquesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  // Période sélectionnée pour les montants
+  const currentDate = new Date();
+  const [selectedMois, setSelectedMois] = useState(currentDate.getMonth() + 1);
+  const [selectedAnnee, setSelectedAnnee] = useState(currentDate.getFullYear());
+
   // Hook pour gérer automatiquement la rubrique "Solde du mois (antérieur)"
   const { soldeMoisRubrique } = useSoldeMoisAnterieurs();
-  
+
+  // Montants par code IMP depuis resultats
+  const { data: statsData = [] } = useRubriquesStats(selectedMois, selectedAnnee);
+  const statsMap = new Map(statsData.map(s => [s.imp, s]));
+
+  const getRecettes = (imp: string | null) => imp ? (statsMap.get(imp)?.totalRecettes ?? 0) : 0;
+  const getDepenses = (imp: string | null) => imp ? (statsMap.get(imp)?.totalDepenses ?? 0) : 0;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRubrique, setEditingRubrique] = useState<Rubrique | null>(null);
@@ -196,38 +221,52 @@ export default function RubriquesPage() {
 
   const columns = [
     {
+      key: "imp",
+      header: "IMP",
+      render: (item: Rubrique) => (
+        <span className="inline-flex px-2 py-1 rounded-md text-xs font-mono font-medium bg-primary/10 text-primary">
+          {item.imp || "-"}
+        </span>
+      ),
+    },
+    {
       key: "libelle",
       header: "Désignation",
       render: (item: Rubrique) => {
-        const isSoldeAnterieurs = item.code === 'SOLDE-ANT' || item.libelle.includes('Solde du mois (antérieur)') || item.libelle === 'Solde du 31/10/2025';
+        const isSolde = item.libelle.toLowerCase().includes('solde');
         return (
           <div className="flex items-center gap-2">
-            <FolderOpen className={`w-4 h-4 ${isSoldeAnterieurs ? 'text-yellow-500' : 'text-primary'}`} />
-            <span className={`font-medium ${isSoldeAnterieurs ? 'text-yellow-600 font-semibold' : ''}`}>
+            <FolderOpen className={`w-4 h-4 ${isSolde ? 'text-yellow-500' : item.categorie === 'Recette' ? 'text-green-600' : 'text-red-500'}`} />
+            <span className={`font-medium ${isSolde ? 'text-yellow-600 font-semibold' : ''}`}>
               {item.libelle}
             </span>
-            {isSoldeAnterieurs && (
-              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                Auto
-              </span>
-            )}
           </div>
         );
       },
     },
     {
-      key: "imp",
-      header: "IMP",
-      render: (item: Rubrique) => (
-        <span className="inline-flex px-2 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary">
-          {item.imp || "-"}
-        </span>
-      ),
+      key: "recettes",
+      header: "Recettes",
+      render: (item: Rubrique) => {
+        const val = item.categorie === 'Recette' ? getRecettes(item.imp) : 0;
+        return (
+          <span className={`text-right block font-mono text-sm ${val > 0 ? 'text-green-700 font-semibold' : 'text-muted-foreground'}`}>
+            {formatMontant(val)}
+          </span>
+        );
+      },
     },
-    { 
-      key: "created_at", 
-      header: "Créée le",
-      render: (item: Rubrique) => new Date(item.created_at).toLocaleDateString("fr-FR")
+    {
+      key: "depenses",
+      header: "Dépenses",
+      render: (item: Rubrique) => {
+        const val = item.categorie === 'Dépense' ? getDepenses(item.imp) : 0;
+        return (
+          <span className={`text-right block font-mono text-sm ${val > 0 ? 'text-red-700 font-semibold' : 'text-muted-foreground'}`}>
+            {formatMontant(val)}
+          </span>
+        );
+      },
     },
     ...(isAdmin ? [{
       key: "actions",
@@ -359,6 +398,31 @@ export default function RubriquesPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+
+        {/* Sélecteur de période pour les montants */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium">Période:</label>
+          <select
+            value={selectedMois}
+            onChange={(e) => setSelectedMois(Number(e.target.value))}
+            className="border rounded-md px-3 py-2 text-sm bg-background"
+            aria-label="Sélectionner le mois"
+          >
+            {MOIS_LABELS.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <select
+            value={selectedAnnee}
+            onChange={(e) => setSelectedAnnee(Number(e.target.value))}
+            className="border rounded-md px-3 py-2 text-sm bg-background"
+            aria-label="Sélectionner l'année"
+          >
+            {[2022, 2023, 2024, 2025, 2026].map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
         
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium">Affichage:</label>
@@ -388,11 +452,23 @@ export default function RubriquesPage() {
       </div>
 
       {/* Stats */}
-      <div className="flex items-center gap-4 p-4 bg-accent rounded-lg">
+      <div className="flex flex-wrap items-center gap-6 p-4 bg-accent rounded-lg">
         <div className="flex items-center gap-2">
           <FolderOpen className="w-5 h-5 text-primary" />
           <span className="font-semibold">{(rubriques ?? []).length}</span>
           <span className="text-muted-foreground">rubriques au total</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Total Recettes :</span>
+          <span className="font-semibold text-green-700 font-mono text-sm">
+            {formatMontant(statsData.reduce((s, r) => s + r.totalRecettes, 0))}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Total Dépenses :</span>
+          <span className="font-semibold text-red-700 font-mono text-sm">
+            {formatMontant(statsData.reduce((s, r) => s + r.totalDepenses, 0))}
+          </span>
         </div>
         {!isAdmin && (
           <div className="ml-auto text-sm text-muted-foreground italic">

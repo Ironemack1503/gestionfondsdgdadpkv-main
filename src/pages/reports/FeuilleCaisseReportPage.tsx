@@ -23,6 +23,7 @@ import { Switch } from '@/components/ui/switch';
 import { useReportData, numberToFrenchWords } from '@/hooks/useReportData';
 import { exportToPDF, exportToExcel, ExportColumn, exportFeuilleCaissePDF } from '@/lib/exportUtils';
 import { exportToWord, generateTableHTML, generateSummaryHTML } from '@/lib/wordExport';
+import { HEADER_IMAGE_BASE64, FOOTER_IMAGE_BASE64, FILIGRANE_IMAGE } from '@/lib/reportImages';
 import { useServices } from '@/hooks/useServices';
 import { useRubriques } from '@/hooks/useRubriques';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
@@ -35,6 +36,120 @@ const moisNoms = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
 ];
+
+const moisNomsUpper = [
+  'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN',
+  'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE'
+];
+
+/** Normalise un texte pour la comparaison (minuscules, sans accents) */
+const normalizeText = (text: string): string =>
+  text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+/**
+ * Règles de correspondance motif → code comptable.
+ * Basées sur les catégories Crystal Reports de la DGDA.
+ * L'ordre est important : les règles plus spécifiques viennent en premier.
+ */
+const DEPENSE_CODE_RULES: Array<{ pattern: RegExp; code: string }> = [
+  // 632540 - Contentieux (PV CX en dépense)
+  { pattern: /pv\s*cx|contentieu|p\/c\s/i, code: '632540' },
+
+  // 663841 - Collations (avant 604130 car plus spécifique)
+  { pattern: /collation|collat\b/i, code: '663841' },
+
+  // 604130 - Articles alimentaires / Restauration
+  { pattern: /restauration|rencontres?\s+locales|complement\s+ration|colis\s+fin|approvisionnement\s+frigos|articles?\s+alimentaires/i, code: '604130' },
+
+  // 618120 - Déplacement
+  { pattern: /deplacement|courses?\s+(de\s+)?s(ce|ervice)|depot.*transmission|transport\s|vacation\s+et\s+deplacement/i, code: '618120' },
+
+  // 632831 - Frais médicaux
+  { pattern: /frais\s+medica|produits?\s+pharm|declaration\s+de\s+creance|provision.*urgence\s+medic|pret\s+remboursable|tranche.*declaration|tranche.*frais\s+medic|solde\s+frais\s+medic/i, code: '632831' },
+
+  // 668340 - Frais funéraires et assistance deuil
+  { pattern: /funerai|assistance\s+(deuil|cas\s+dec|nettoyeurs\s+fete|sociale\s+cas)/i, code: '668340' },
+
+  // 631000 - Frais bancaires (avant 624000 car "intervention bancaire" ne doit pas matcher "intervention")
+  { pattern: /intervention\s+bancaire|frais\s+bancaire|frais\s+d.intervention\s+bancaire|retrait\s+fonds/i, code: '631000' },
+
+  // 624000 - Entretien, réparations et maintenance
+  { pattern: /reparation|pces?\s+de\s+rechange|pieces?\s+de\s+rechange|courroie|batterie|entretien|maintenance|pneu|huile\s+de\s+frein|nettoyage\s+bus|regarnissage|evaporateur|climatisation|achat\s+axe\b/i, code: '624000' },
+
+  // 604210 - Carburant et lubrifiant
+  { pattern: /carburant|gasoil|essence|lubrifiant|graisse\s+(pour\s+)?charroi|huile\s+hydraulique/i, code: '604210' },
+
+  // 604720 - Consommables informatiques
+  { pattern: /toner|consommables?\s+inform|mat\.\s*(&|et)\s*cons|flash\s+disk|cartouche|achat\s+mat\.?\s*inform|complement\s+mat\.?\s*(&|et)/i, code: '604720' },
+
+  // 605200 - Électricité
+  { pattern: /electricite|onduleur|ampoule|rallonge|fusible\b|mat\.\s*electri|stabilisateur|regulateur|achat\s+unites?\s+laser/i, code: '605200' },
+
+  // 604710 - Fournitures de bureau
+  { pattern: /fournitures?\s+(de\s+)?bureau|registres?\s+indicat|cahiers?\s+registres|mobilier|complement\s+fournitures|destructeur\s+papier|achat\s+tables\b|tambours|splits?\s+et\s+accessoires|coffre\s+fort|indicateurs?\s+de\s+courriers|montage\s+armoire|montage\s+table|demontage\s+meuble|frais\s+de\s+montage\s+table/i, code: '604710' },
+
+  // 605100 - Eau
+  { pattern: /\beau\b|assainissement|regideso/i, code: '605100' },
+
+  // 604300 - Produits d'entretien
+  { pattern: /produits?\s+d.entretien|aniosgel/i, code: '604300' },
+
+  // 632860 - Reliure, impression, reproduction
+  { pattern: /reliure|reproduction\s+rapport|elaboration\s+(du\s+)?rapport/i, code: '632860' },
+
+  // 628100 - Communications et télécommunications
+  { pattern: /communication|abonnement|telephone|vodacom|orange\s+et\s+airtel|cable\s+utp|antenne|montage\s+antenne/i, code: '628100' },
+
+  // 622210 - Loyers
+  { pattern: /loyer|pment\s+loyer|garantie\s+locative/i, code: '622210' },
+
+  // 632840 - Gardiennage et sécurité
+  { pattern: /gardiennage/i, code: '632840' },
+
+  // 661257 - Prime du comptable
+  { pattern: /prime\s+du\s+comptable/i, code: '661257' },
+
+  // 659800 - Autres charges (catch-all pour divers)
+  { pattern: /manutention|salubrite|achat\s+cadenas|achat\s+malles|achat\s+sacs|achat\s+cylindre|achat\s+serrure|achat\s+baches|intervention\s+sces?\s+ext|frais\s+d.intervention\s+sces|frais\s+de?\s+recherche|chambres?\s+a\s+air|cable\s+de\s+remorcage|aide\s+au\s+mariage|prime\s+surveillance|achat\s+cordes|achat\s+palettes/i, code: '659800' },
+];
+
+/** Trouve le code comptable correspondant au motif d'une opération */
+const findResultatCode = (
+  motif: string,
+  isRecette: boolean,
+  codeMap: { code: string; libelle: string; categorie: string }[]
+): string => {
+  // Toutes les recettes → 707820
+  if (isRecette) {
+    const recetteEntry = codeMap.find(e => e.categorie === 'Recettes' && e.code !== '-');
+    return recetteEntry?.code || '707820';
+  }
+
+  // Pour les dépenses, chercher dans les règles statiques (normalisé sans accents)
+  const motifNorm = normalizeText(motif);
+  for (const rule of DEPENSE_CODE_RULES) {
+    if (rule.pattern.test(motifNorm)) {
+      return rule.code;
+    }
+  }
+
+  // Fallback : chercher dans les libellés de resultats
+  if (codeMap.length > 0) {
+    const depEntries = codeMap.filter(e => e.categorie === 'Dépenses' && e.code !== '-');
+    let bestMatch = '';
+    let bestCode = '';
+    for (const entry of depEntries) {
+      const libNorm = normalizeText(entry.libelle);
+      if (motifNorm.includes(libNorm) && libNorm.length > bestMatch.length) {
+        bestMatch = libNorm;
+        bestCode = entry.code;
+      }
+    }
+    if (bestCode) return bestCode;
+  }
+
+  return 'D';
+};
 
 type FilterType = 'all' | 'recettes' | 'depenses';
 
@@ -51,6 +166,29 @@ export default function FeuilleCaisseReportPage() {
   const { generateFeuilleCaisse, calculateEtatResultat, isLoading, recettes, depenses } = useReportData();
   const { services, isLoading: loadingServices } = useServices();
   const { rubriques, isLoading: loadingRubriques } = useRubriques();
+
+  // Fetch resultats code mapping for the selected month
+  const moisAnneeKey = `${moisNomsUpper[selectedMois - 1]}/${selectedAnnee}`;
+  const { data: resultatsCodes = [], isLoading: loadingCodes } = useQuery({
+    queryKey: ['resultats-codes', moisAnneeKey],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('resultats')
+        .select('code, libelle, categorie')
+        .eq('mois_annee', moisAnneeKey)
+        .neq('code', '-');
+      if (!data) return [];
+      // Dédupliquer par code
+      const seen = new Map<string, { code: string; libelle: string; categorie: string }>();
+      for (const row of data) {
+        if (row.code && !seen.has(row.code)) {
+          seen.set(row.code, { code: row.code, libelle: row.libelle || '', categorie: row.categorie || '' });
+        }
+      }
+      return Array.from(seen.values());
+    },
+    staleTime: 10 * 60 * 1000,
+  });
 
   // Calculate date range from month/year
   const dateDebut = `${selectedAnnee}-${String(selectedMois).padStart(2, '0')}-01`;
@@ -94,8 +232,28 @@ export default function FeuilleCaisseReportPage() {
 
   // Generate report data
   const feuilleCaisseData = useMemo(() => {
-    return generateFeuilleCaisse({ dateDebut, dateFin }, soldePrecedent);
-  }, [generateFeuilleCaisse, dateDebut, dateFin, soldePrecedent]);
+    const data = generateFeuilleCaisse({ dateDebut, dateFin }, soldePrecedent);
+    return data.map(row => {
+      // Recettes → toujours 707820
+      if (row.recette > 0) {
+        return { ...row, imp: '707820' };
+      }
+      // Dépenses : utiliser imp_code depuis la DB si disponible (≠ 'D' = valeur fallback ancien)
+      // 'D' ou null = pas encore de code IMP en base → appliquer règles statiques
+      // Normaliser les codes avec suffixe lettre ex: 632540A → 632540
+      if (row.imp && row.imp !== 'D') {
+        const normalizedImp = row.imp.replace(/^(\d{6})[A-Za-z]+$/, '$1');
+        if (/^\d{6}$/.test(normalizedImp)) {
+          return { ...row, imp: normalizedImp }; // imp_code valide depuis base de données
+        }
+      }
+      // Fallback : règles statiques sur le libellé
+      return {
+        ...row,
+        imp: findResultatCode(row.libelle, false, resultatsCodes),
+      };
+    });
+  }, [generateFeuilleCaisse, dateDebut, dateFin, soldePrecedent, resultatsCodes]);
 
   const etatResultat = useMemo(() => {
     return calculateEtatResultat({ dateDebut, dateFin }, soldePrecedent);
@@ -267,7 +425,7 @@ export default function FeuilleCaisseReportPage() {
   };
 
   // Format date for display
-  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('fr-FR');
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
   const getMoisAnnee = () => `${moisNoms[selectedMois - 1]} ${selectedAnnee}`;
 
   // === EXPORT OFFICIEL via formulaire pré-export ===
@@ -287,14 +445,15 @@ export default function FeuilleCaisseReportPage() {
     const totalDepenses = filteredData.reduce((s, r) => s + (r.depense || 0), 0);
     const solde = totalRecettes - totalDepenses;
     const balance = soldePrecedent + solde;
-    const totalEnLettres = `${numberToFrenchWords(Math.floor(Math.abs(balance)))} Francs Congolais`;
+    const totalEnLettres = `${numberToFrenchWords(Math.floor(Math.abs(solde)))} Francs Congolais`;
 
     if (params.exportType === 'print') {
       const printWindow = window.open('', '_blank');
       if (!printWindow) return;
       printWindow.document.write('<html><head><title>Feuille de Caisse</title>');
-      printWindow.document.write('<style>body{font-family:"Courier New",monospace;font-size:10pt;margin:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:2px 4px}th{background:#1e40af;color:#fff;text-align:center}.text-right{text-align:right}.grp-foot{background:#f5f5f5;font-style:italic}.total-row{background:#e5e7eb;font-weight:bold}</style>');
+      printWindow.document.write(`<style>body{font-family:"Courier New",monospace;font-size:10pt;margin:20px;position:relative}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:2px 4px}th{background:#1e40af;color:#fff;text-align:center}.text-right{text-align:right}.grp-foot{background:#f5f5f5;font-style:italic}.total-row{background:#e5e7eb;font-weight:bold}.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);opacity:0.06;pointer-events:none;z-index:-1;width:500px;height:500px}@media print{.watermark{position:fixed}}</style>`);
       printWindow.document.write('</head><body>');
+      printWindow.document.write(`<img class="watermark" src="${FILIGRANE_IMAGE}" alt="" />`);
       printWindow.document.write(buildOfficialHTML(reportData, moisLabel, params, totalRecettes, totalDepenses, solde, balance, totalEnLettres, true));
       printWindow.document.write('</body></html>');
       printWindow.document.close();
@@ -345,15 +504,11 @@ export default function FeuilleCaisseReportPage() {
   ): string => {
     // En-tête officiel DGDA (uniquement pour impression directe)
     const header = includeHeader ? `
-      <div style="text-align:center;font-family:'Courier New',monospace;font-size:10pt;margin-bottom:12px">
-        <p style="font-weight:bold;font-size:12pt;letter-spacing:2px;margin:0">REPUBLIQUE DEMOCRATIQUE DU CONGO</p>
-        <p style="margin:2px 0">MINISTERE DES FINANCES</p>
-        <p style="font-weight:bold;margin:2px 0">D.G.D.A.</p>
-        <p style="margin:2px 0">DIRECTION PROVINCIALE DE KINSHASA</p>
-        <p style="font-weight:bold;margin:2px 0">BUREAU COMPTABLE</p>
-        <hr style="border:1px solid #000;margin:8px auto;width:60%" />
-        <p style="font-weight:bold;font-size:13pt;margin:8px 0;text-decoration:underline">FEUILLE DE CAISSE &mdash; MOIS DE ${moisLabel.toUpperCase()} ${params.annee}</p>
+      <div style="text-align:center;margin-bottom:8px">
+        <img src="${HEADER_IMAGE_BASE64}" style="width:100%;max-width:700px;height:auto" alt="En-tête DGDA" />
       </div>
+      <p style="font-weight:bold;font-size:10pt;margin:2px 0 8px 0;text-align:center;font-family:'Courier New',monospace">FEUILLE DE CAISSE MOIS DE<br/>${moisLabel.toUpperCase()} ${params.annee}</p>
+      <p style="font-weight:bold;text-decoration:underline;text-align:left;font-family:'Courier New',monospace;font-size:10pt;margin:12px 0 8px 0">BUREAU&nbsp;&nbsp;COMPTABLE</p>
     ` : '';
 
     // Grouper par date
@@ -366,37 +521,27 @@ export default function FeuilleCaisseReportPage() {
 
     let rows = '';
     groups.forEach((items, dateKey) => {
-      const dateFormatted = new Date(dateKey).toLocaleDateString('fr-FR');
+      const dateFormatted = new Date(dateKey).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
       const grpR = items.reduce((s, i) => s + (i.recette || 0), 0);
       const grpD = items.reduce((s, i) => s + (i.depense || 0), 0);
 
-      // En-tête de groupe
-      rows += `<tr style="background:#f3f4f6"><td colspan="7" style="border:1px solid #000;padding:2px 4px;font-weight:bold;text-align:center">${dateFormatted}</td></tr>`;
+      // En-tête de groupe supprimé — la date est déjà dans la colonne Date
       // Données
       items.forEach(item => {
+        const libelleCleaned = (item.libelle || '').replace(/\s*-\s*null$/i, '').replace(/\s*null$/i, '');
         rows += `<tr>
-          <td style="border:1px solid #000;padding:2px 4px;text-align:center">${dateFormatted}</td>
-          <td style="border:1px solid #000;padding:2px 4px;text-align:center">${item.numeroOrdre}</td>
-          <td style="border:1px solid #000;padding:2px 4px;text-align:center">${item.numeroBEO}</td>
-          <td style="border:1px solid #000;padding:2px 4px">${item.libelle}</td>
-          <td style="border:1px solid #000;padding:2px 4px;text-align:right">${item.recette ? formatMontant(item.recette) : ''}</td>
-          <td style="border:1px solid #000;padding:2px 4px;text-align:right">${item.depense ? formatMontant(item.depense) : ''}</td>
-          <td style="border:1px solid #000;padding:2px 4px;text-align:center">${item.imp || ''}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:center;white-space:nowrap;font-size:8pt;font-weight:bold">${dateFormatted}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:center;white-space:nowrap;font-size:8pt;font-weight:bold">${item.numeroOrdre}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:center;white-space:nowrap;font-size:8pt;font-weight:bold">${item.numeroBEO}</td>
+          <td style="border:1px solid #000;padding:2px 4px;white-space:nowrap;font-size:8pt;font-weight:bold">${libelleCleaned}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:right;white-space:nowrap;font-size:8pt;font-weight:bold">${item.recette ? formatMontant(item.recette) : ''}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:right;white-space:nowrap;font-size:8pt;font-weight:bold">${item.depense ? formatMontant(item.depense) : ''}</td>
+          <td style="border:1px solid #000;padding:2px 4px;text-align:center;white-space:nowrap;font-size:8pt;font-weight:bold">${item.imp || ''}</td>
         </tr>`;
       });
-      // Pied de groupe a (sous-total recettes)
-      rows += `<tr style="background:#f9fafb;font-style:italic">
-        <td colspan="4" style="border:1px solid #000;padding:2px 4px"></td>
-        <td style="border:1px solid #000;padding:2px 4px;text-align:right;font-weight:bold">${grpR > 0 ? formatMontant(grpR) : ''}</td>
-        <td style="border:1px solid #000;padding:2px 4px"></td>
-        <td style="border:1px solid #000;padding:2px 4px"></td>
-      </tr>`;
-      // Pied de groupe b (sous-total dépenses)
-      rows += `<tr style="background:#f9fafb;font-style:italic">
-        <td colspan="4" style="border:1px solid #000;padding:2px 4px"></td>
-        <td style="border:1px solid #000;padding:2px 4px"></td>
-        <td style="border:1px solid #000;padding:2px 4px;text-align:right;font-weight:bold">${grpD > 0 ? formatMontant(grpD) : ''}</td>
-        <td style="border:1px solid #000;padding:2px 4px"></td>
+      // Pied de groupe — ligne vide de séparation
+      rows += `<tr>
+        <td colspan="7" style="border:1px solid #000;padding:2px 4px">&nbsp;</td>
       </tr>`;
     });
 
@@ -404,44 +549,49 @@ export default function FeuilleCaisseReportPage() {
       ${header}
       <table style="width:100%;border-collapse:collapse;font-family:'Courier New',monospace;font-size:10pt">
         <thead>
-          <tr style="background:#1e40af;color:#fff">
+          <tr>
             <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:70px">Date</th>
-            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:50px">N°ORD</th>
-            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:65px">N°BEO</th>
-            <th style="border:1px solid #000;padding:2px 4px;text-align:left">LIBELLE</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:40px">N°ORD</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:45px">N°BEO</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;font-weight:bold">LIBELLE</th>
             <th style="border:1px solid #000;padding:2px 4px;text-align:center" colspan="3">MONTANT</th>
           </tr>
-          <tr style="background:#1e40af;color:#fff">
+          <tr>
             <th style="border:1px solid #000;padding:2px 4px" colspan="4"></th>
-            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:100px">RECETTE</th>
-            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:100px">DEPENSE</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:110px">RECETTE</th>
+            <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:110px">DEPENSE</th>
             <th style="border:1px solid #000;padding:2px 4px;text-align:center;width:50px">IMP</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
         <tfoot>
-          <tr style="background:#e5e7eb;font-weight:bold">
-            <td colspan="4" style="border:1px solid #000;padding:2px 4px;text-align:right">TOTAL</td>
+          <tr style="font-weight:bold">
+            <td colspan="4" style="border:1px solid #000;padding:2px 4px;text-align:right">TOTAL :</td>
             <td style="border:1px solid #000;padding:2px 4px;text-align:right">${formatMontant(totalRecettes)}</td>
             <td style="border:1px solid #000;padding:2px 4px;text-align:right">${formatMontant(totalDepenses)}</td>
             <td style="border:1px solid #000;padding:2px 4px"></td>
           </tr>
-          <tr style="background:#e5e7eb;font-weight:bold">
+          <tr style="font-weight:bold">
             <td colspan="4" style="border:1px solid #000;padding:2px 4px;text-align:right">ENCAISSE :</td>
             <td colspan="2" style="border:1px solid #000;padding:2px 4px;text-align:right">${formatMontant(solde)}</td>
             <td style="border:1px solid #000;padding:2px 4px"></td>
           </tr>
-          <tr style="background:#e5e7eb;font-weight:bold">
+          <tr style="font-weight:bold">
             <td colspan="4" style="border:1px solid #000;padding:2px 4px;text-align:right">BALANCE :</td>
             <td colspan="2" style="border:1px solid #000;padding:2px 4px;text-align:right">${formatMontant(balance)}</td>
             <td style="border:1px solid #000;padding:2px 4px"></td>
           </tr>
         </tfoot>
       </table>
-      <p style="margin-top:8px;font-style:italic"><b>Nous disons :</b> ${totalEnLettres}</p>
-      <p style="text-align:right;margin-top:16px">Fait à Kinshasa, le ${params.dateFeuille}</p>
-      <p style="text-align:right;margin-top:24px;font-weight:bold;letter-spacing:0.05em">COMPTABLE PROVINCIALE DES DEPENSES</p>
-      <p style="text-align:right;margin-top:40px;font-weight:bold;text-decoration:underline">${params.nomComptable}</p>
+      <div style="margin-top:8px;font-weight:bold;font-family:'Courier New',monospace;font-size:10pt;word-wrap:break-word;overflow-wrap:break-word;padding-left:120px;text-indent:-120px"><span>Nous disons :&nbsp;&nbsp;</span>${totalEnLettres}</div>
+      <div style="page-break-inside:avoid;font-family:'Courier New',monospace;font-size:10pt">
+        <p style="text-align:right;margin-top:16px">Fait à Kinshasa, le ${params.dateFeuille}</p>
+        <p style="text-align:right;margin-top:10px;font-weight:bold">COMPTABLE PROVINCIALE DES DEPENSES</p>
+        <p style="text-align:right;margin-top:8px;font-weight:bold">${params.nomComptable}</p>
+      </div>
+      <div style="margin-top:30px;text-align:center">
+        <img src="${FOOTER_IMAGE_BASE64}" style="width:100%;max-width:700px;height:auto" alt="Pied de page DGDA" />
+      </div>
     `;
   };
 
@@ -613,7 +763,7 @@ export default function FeuilleCaisseReportPage() {
     });
   };
 
-  const loading = isLoading || loadingBalance || loadingServices || loadingRubriques;
+  const loading = isLoading || loadingBalance || loadingServices || loadingRubriques || loadingCodes;
 
   // Render grouped table
   const renderGroupedTable = () => {
@@ -653,22 +803,22 @@ export default function FeuilleCaisseReportPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-center">N° Bon</TableHead>
-                    <TableHead>N° BEO</TableHead>
+                    <TableHead className="w-20">Date</TableHead>
+                    <TableHead className="w-10 text-center">N°ORD</TableHead>
+                    <TableHead className="w-14">N°BEO</TableHead>
                     <TableHead>Libellé</TableHead>
                     <TableHead className="text-right">Montant (FC)</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className="font-bold">
                   {group.rows.map((row) => (
                     <TableRow key={row.id} className="hover:bg-muted/30">
-                      <TableCell>{formatDate(row.date)}</TableCell>
-                      <TableCell className="text-center font-medium">
+                      <TableCell className="whitespace-nowrap">{formatDate(row.date)}</TableCell>
+                      <TableCell className="text-center font-medium whitespace-nowrap">
                         {row.recette > 0 ? `REC-${row.numeroOrdre}` : `DEP-${row.numeroOrdre}`}
                       </TableCell>
-                      <TableCell className="font-mono text-sm">{row.numeroBEO}</TableCell>
-                      <TableCell>{row.libelle}</TableCell>
+                      <TableCell className="font-mono text-sm whitespace-nowrap">{row.numeroBEO}</TableCell>
+                      <TableCell className="truncate max-w-[280px]">{row.libelle}</TableCell>
                       <TableCell className={`text-right font-medium ${row.recette > 0 ? 'text-success' : 'text-destructive'}`}>
                         {formatMontant(row.recette > 0 ? row.recette : row.depense)}
                       </TableCell>
@@ -719,20 +869,20 @@ export default function FeuilleCaisseReportPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead className="text-center">N° Bon</TableHead>
-                <TableHead>N° BEO</TableHead>
+                <TableHead className="w-20">Date</TableHead>
+                <TableHead className="w-10 text-center">N°ORD</TableHead>
+                <TableHead className="w-14">N°BEO</TableHead>
                 <TableHead>Provenance / Motif</TableHead>
                 <TableHead className="text-right">Montant (FC)</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="font-bold">
               {filteredData.map((row) => (
                 <TableRow key={row.id} className="hover:bg-muted/30">
-                  <TableCell>{formatDate(row.date)}</TableCell>
-                  <TableCell className="text-center font-medium">REC-{row.numeroOrdre}</TableCell>
-                  <TableCell className="font-mono text-sm">{row.numeroBEO}</TableCell>
-                  <TableCell>{row.libelle}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatDate(row.date)}</TableCell>
+                  <TableCell className="text-center font-medium whitespace-nowrap">REC-{row.numeroOrdre}</TableCell>
+                  <TableCell className="font-mono text-sm whitespace-nowrap">{row.numeroBEO}</TableCell>
+                  <TableCell className="truncate max-w-[280px]">{row.libelle}</TableCell>
                   <TableCell className="text-right text-success font-medium">
                     {formatMontant(row.recette)}
                   </TableCell>
@@ -758,20 +908,20 @@ export default function FeuilleCaisseReportPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead className="text-center">N° Bon</TableHead>
-                <TableHead>N° BEO</TableHead>
+                <TableHead className="w-20">Date</TableHead>
+                <TableHead className="w-10 text-center">N°ORD</TableHead>
+                <TableHead className="w-14">N°BEO</TableHead>
                 <TableHead>Bénéficiaire / Motif</TableHead>
                 <TableHead className="text-right">Montant (FC)</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="font-bold">
               {filteredData.map((row) => (
                 <TableRow key={row.id} className="hover:bg-muted/30">
-                  <TableCell>{formatDate(row.date)}</TableCell>
-                  <TableCell className="text-center font-medium">DEP-{row.numeroOrdre}</TableCell>
-                  <TableCell className="font-mono text-sm">{row.numeroBEO}</TableCell>
-                  <TableCell>{row.libelle}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatDate(row.date)}</TableCell>
+                  <TableCell className="text-center font-medium whitespace-nowrap">DEP-{row.numeroOrdre}</TableCell>
+                  <TableCell className="font-mono text-sm whitespace-nowrap">{row.numeroBEO}</TableCell>
+                  <TableCell className="truncate max-w-[280px]">{row.libelle}</TableCell>
                   <TableCell className="text-right text-destructive font-medium">
                     {formatMontant(row.depense)}
                   </TableCell>
@@ -797,68 +947,68 @@ export default function FeuilleCaisseReportPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead className="text-center">N° Ordre</TableHead>
-              <TableHead>N° BEO</TableHead>
+              <TableHead className="w-20 whitespace-nowrap">Date</TableHead>
+              <TableHead className="w-10 text-center whitespace-nowrap">N°ORD</TableHead>
+              <TableHead className="w-14 whitespace-nowrap">N°BEO</TableHead>
               <TableHead>Libellé</TableHead>
-              <TableHead className="text-right">Recette (FC)</TableHead>
-              <TableHead className="text-right">Dépense (FC)</TableHead>
-              <TableHead className="text-center">IMP</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-right">Caisse</TableHead>
-              <TableHead className="text-right">Balance</TableHead>
+              <TableHead className="text-right whitespace-nowrap">Recette (FC)</TableHead>
+              <TableHead className="text-right whitespace-nowrap">Dépense (FC)</TableHead>
+              <TableHead className="w-16 text-center whitespace-nowrap">IMP</TableHead>
+              <TableHead className="text-right whitespace-nowrap">Total</TableHead>
+              <TableHead className="text-right whitespace-nowrap">Caisse</TableHead>
+              <TableHead className="text-right whitespace-nowrap">Balance</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {/* Solde precedent row */}
-            <TableRow className="bg-muted/50 font-medium">
-              <TableCell>{formatDate(dateDebut)}</TableCell>
+            <TableRow className="bg-muted/50 font-bold">
+              <TableCell className="whitespace-nowrap">{formatDate(dateDebut)}</TableCell>
               <TableCell className="text-center">-</TableCell>
               <TableCell>REPORT</TableCell>
               <TableCell>Solde de clôture mois antérieur</TableCell>
-              <TableCell className="text-right text-success">
+              <TableCell className="text-right text-success whitespace-nowrap">
                 {soldePrecedent > 0 ? formatMontant(soldePrecedent) : '-'}
               </TableCell>
               <TableCell className="text-right text-destructive">-</TableCell>
               <TableCell className="text-center">SP</TableCell>
-              <TableCell className="text-right">{formatMontant(soldePrecedent)}</TableCell>
-              <TableCell className="text-right">{formatMontant(soldePrecedent)}</TableCell>
-              <TableCell className="text-right font-bold">{formatMontant(soldePrecedent)}</TableCell>
+              <TableCell className="text-right whitespace-nowrap">{formatMontant(soldePrecedent)}</TableCell>
+              <TableCell className="text-right whitespace-nowrap">{formatMontant(soldePrecedent)}</TableCell>
+              <TableCell className="text-right font-bold whitespace-nowrap">{formatMontant(soldePrecedent)}</TableCell>
             </TableRow>
             {filteredData.map((row) => (
-              <TableRow key={row.id} className="hover:bg-muted/30">
-                <TableCell>{formatDate(row.date)}</TableCell>
-                <TableCell className="text-center">{row.numeroOrdre}</TableCell>
-                <TableCell className="font-mono text-sm">{row.numeroBEO}</TableCell>
-                <TableCell>{row.libelle}</TableCell>
-                <TableCell className="text-right text-success">
+              <TableRow key={row.id} className="hover:bg-muted/30 font-bold">
+                <TableCell className="whitespace-nowrap">{formatDate(row.date)}</TableCell>
+                <TableCell className="text-center whitespace-nowrap">{row.numeroOrdre}</TableCell>
+                <TableCell className="font-mono text-sm whitespace-nowrap">{row.numeroBEO}</TableCell>
+                <TableCell className="truncate max-w-[300px]">{row.libelle}</TableCell>
+                <TableCell className="text-right text-success whitespace-nowrap">
                   {row.recette > 0 ? formatMontant(row.recette) : '-'}
                 </TableCell>
-                <TableCell className="text-right text-destructive">
+                <TableCell className="text-right text-destructive whitespace-nowrap">
                   {row.depense > 0 ? formatMontant(row.depense) : '-'}
                 </TableCell>
-                <TableCell className="text-center">{row.imp}</TableCell>
-                <TableCell className="text-right">{formatMontant(row.total)}</TableCell>
-                <TableCell className="text-right">{formatMontant(row.caisse)}</TableCell>
-                <TableCell className="text-right font-bold">{formatMontant(row.balance)}</TableCell>
+                <TableCell className="text-center whitespace-nowrap font-mono text-xs">{row.imp}</TableCell>
+                <TableCell className="text-right whitespace-nowrap">{formatMontant(row.total)}</TableCell>
+                <TableCell className="text-right whitespace-nowrap">{formatMontant(row.caisse)}</TableCell>
+                <TableCell className="text-right font-bold whitespace-nowrap">{formatMontant(row.balance)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
           <TableFooter>
             <TableRow className="bg-muted font-bold">
               <TableCell colSpan={4}>TOTAUX</TableCell>
-              <TableCell className="text-right text-success">
+              <TableCell className="text-right text-success whitespace-nowrap">
                 {formatMontant(filteredTotals.totalRecettes)}
               </TableCell>
-              <TableCell className="text-right text-destructive">
+              <TableCell className="text-right text-destructive whitespace-nowrap">
                 {formatMontant(filteredTotals.totalDepenses)}
               </TableCell>
               <TableCell></TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right whitespace-nowrap">
                 {formatMontant(filteredTotals.encaisse)}
               </TableCell>
               <TableCell></TableCell>
-              <TableCell className={`text-right ${filteredTotals.balance >= 0 ? 'text-info' : 'text-destructive'}`}>
+              <TableCell className={`text-right whitespace-nowrap ${filteredTotals.balance >= 0 ? 'text-info' : 'text-destructive'}`}>
                 {formatMontant(filteredTotals.balance)}
               </TableCell>
             </TableRow>
