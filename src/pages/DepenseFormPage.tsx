@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Save, X, AlertCircle, Search, FileText, DollarSign, Calendar, Eye, Edit, Trash2, Loader2, Plus } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { montantEnLettre } from "@/lib/montantEnLettre";
 import { supabase } from "@/integrations/supabase/client";
 import { useDepenses, Depense } from "@/hooks/useDepenses";
@@ -18,6 +18,7 @@ import { fr } from "date-fns/locale";
 import { EditDepenseDialog, ViewTransactionDialog } from "@/components/dialogs";
 import { DataTable, Column } from "@/components/shared/DataTable";
 import { Badge } from "@/components/ui/badge";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,8 +83,9 @@ const CODE_IMP_OPTIONS = [
 export default function DepenseFormPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { depenses, isLoading, createDepense, deleteDepense: deleteDepenseMutation } = useDepenses();
+  const { depenses, isLoading, createDepense, updateDepense, deleteDepense: deleteDepenseMutation } = useDepenses();
   const { isInstructeur, isAdmin, loading: roleLoading } = useLocalUserRole();
+  const queryClient = useQueryClient();
   
   const [activeTab, setActiveTab] = useState("create");
   const [searchQuery, setSearchQuery] = useState("");
@@ -239,6 +241,48 @@ export default function DepenseFormPage() {
     }
   };
 
+  // Filtrage des dépenses côté SERVEUR (requête Supabase avec filtres date)
+  const { data: searchResults = [], isLoading: isSearching } = useQuery({
+    queryKey: ['depenses-search', searchQuery, searchPeriod.startDate, searchPeriod.endDate],
+    queryFn: async () => {
+      let query = supabase
+        .from('depenses')
+        .select(`
+          id, numero_bon, rubrique_id, date_transaction, heure,
+          beneficiaire, motif, montant, montant_lettre, observation,
+          user_id, created_at, updated_at, libelle,
+          "NBEO", imp_code,
+          rubrique:rubriques(id, code, libelle)
+        `)
+        .order('date_transaction', { ascending: false })
+        .order('heure', { ascending: false });
+
+      // Filtre par période côté serveur
+      if (searchPeriod.startDate) {
+        query = query.gte('date_transaction', searchPeriod.startDate);
+      }
+      if (searchPeriod.endDate) {
+        query = query.lte('date_transaction', searchPeriod.endDate);
+      }
+
+      // Filtre textuel côté serveur (recherche partielle sur motif, beneficiaire, NBEO)
+      if (searchQuery) {
+        query = query.or(
+          `motif.ilike.%${searchQuery}%,beneficiaire.ilike.%${searchQuery}%,libelle.ilike.%${searchQuery}%,NBEO.ilike.%${searchQuery}%`
+        );
+      }
+
+      query = query.limit(500);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(d => ({ ...d, date: d.date_transaction })) as Depense[];
+    },
+    enabled: activeTab === 'list',
+  });
+
+  const filteredDepenses = searchResults;
+
   // Vérification des droits d'accès
   if (roleLoading || isLoading) {
     return (
@@ -265,40 +309,6 @@ export default function DepenseFormPage() {
       </div>
     );
   }
-
-  // Filtrage des dépenses
-  const filteredDepenses = (depenses || []).filter(depense => {
-    // Filtre par recherche textuelle
-    let matchesSearch = true;
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      matchesSearch = (
-        depense.motif?.toLowerCase().includes(query) ||
-        depense.numero_bon?.toString().includes(query) ||
-        depense.numero_beo?.toLowerCase().includes(query) ||
-        depense.beneficiaire?.toLowerCase().includes(query) ||
-        depense.montant?.toString().includes(query)
-      );
-    }
-
-    // Filtre par période
-    let matchesPeriod = true;
-    if (searchPeriod.startDate || searchPeriod.endDate) {
-      const depenseDate = depense.date_transaction ? new Date(depense.date_transaction) : null;
-      if (depenseDate) {
-        if (searchPeriod.startDate) {
-          matchesPeriod = matchesPeriod && depenseDate >= new Date(searchPeriod.startDate);
-        }
-        if (searchPeriod.endDate) {
-          matchesPeriod = matchesPeriod && depenseDate <= new Date(searchPeriod.endDate);
-        }
-      } else {
-        matchesPeriod = false;
-      }
-    }
-
-    return matchesSearch && matchesPeriod;
-  });
 
   const handleEdit = (depense: Depense) => {
     setSelectedDepense(depense);
@@ -334,11 +344,11 @@ export default function DepenseFormPage() {
       ),
     },
     {
-      key: "numero_beo",
+      key: "NBEO",
       header: "N° BÉO",
       render: (depense) => (
         <span className="font-mono text-sm">
-          {depense.numero_beo || "—"}
+          {(depense as any).NBEO || "—"}
         </span>
       ),
     },
@@ -366,6 +376,15 @@ export default function DepenseFormPage() {
       render: (depense) => (
         <span className="font-semibold text-red-600">
           {depense.montant ? formatMontant(depense.montant) : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "imp_code",
+      header: "IMP",
+      render: (depense) => (
+        <span className="font-mono text-xs font-bold">
+          {depense.imp_code || "—"}
         </span>
       ),
     },
@@ -659,7 +678,7 @@ export default function DepenseFormPage() {
             <div className="p-4 border rounded-lg">
               <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <FileText className="h-4 w-4" />
-                <span className="text-sm">Total dépenses</span>
+                <span className="text-sm">Total dépenses (base)</span>
               </div>
               <p className="text-2xl font-bold">{depenses?.length || 0}</p>
             </div>
@@ -669,7 +688,9 @@ export default function DepenseFormPage() {
                 <Search className="h-4 w-4" />
                 <span className="text-sm">Résultats trouvés</span>
               </div>
-              <p className="text-2xl font-bold">{filteredDepenses.length}</p>
+              <p className="text-2xl font-bold">
+                {isSearching ? <Loader2 className="h-5 w-5 animate-spin inline" /> : filteredDepenses.length}
+              </p>
             </div>
             
             <div className="p-4 border rounded-lg">
@@ -704,10 +725,17 @@ export default function DepenseFormPage() {
           depense={selectedDepense}
           open={isEditDialogOpen}
           onOpenChange={setIsEditDialogOpen}
-          onSave={async () => {
+          onSave={async (data) => {
+            if (data.id) {
+              await updateDepense.mutateAsync(data as any);
+              // Rafraîchir les résultats de recherche et les données rapport
+              queryClient.invalidateQueries({ queryKey: ['depenses-search'] });
+              queryClient.invalidateQueries({ queryKey: ['report-data'] });
+            }
             setIsEditDialogOpen(false);
             setSelectedDepense(null);
           }}
+          isLoading={updateDepense.isPending}
         />
       )}
       

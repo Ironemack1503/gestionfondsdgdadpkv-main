@@ -47,13 +47,13 @@ export function EditDepenseDialog({
   const { services } = useServices();
   const [formData, setFormData] = useState({
     date_transaction: "",
-    numero_beo: "",
+    NBEO: "",
     libelle: "",
     beneficiaire: "",
     motif: "",
     montant: "",
     montant_lettre: "",
-    imp: "",
+    imp_code: "",
     observation: "",
     rubrique_id: "",
     service_id: "",
@@ -64,13 +64,13 @@ export function EditDepenseDialog({
     if (depense) {
       setFormData({
         date_transaction: depense.date_transaction || depense.date,
-        numero_beo: depense.numero_beo || "",
+        NBEO: (depense as any).NBEO || depense.numero_beo || "",
         libelle: depense.libelle || "",
         beneficiaire: depense.beneficiaire,
         motif: depense.motif,
         montant: String(depense.montant),
         montant_lettre: depense.montant_lettre || "",
-        imp: depense.imp || "",
+        imp_code: depense.imp_code || depense.imp || "",
         observation: depense.observation || "",
         rubrique_id: depense.rubrique_id || "",
         service_id: depense.service_id || "",
@@ -97,17 +97,15 @@ export function EditDepenseDialog({
     await onSave({
       id: depense.id,
       date_transaction: formData.date_transaction,
-      numero_beo: formData.numero_beo || null,
+      NBEO: formData.NBEO || null,
       libelle: formData.libelle,
       beneficiaire: formData.beneficiaire,
       motif: formData.motif,
       montant: parseFloat(formData.montant),
       montant_lettre: formData.montant_lettre,
-      imp: formData.imp,
+      imp_code: formData.imp_code,
       observation: formData.observation,
-      rubrique_id: formData.rubrique_id || null,
-      service_id: formData.service_id || null,
-    });
+    } as any);
   };
 
   if (!depense) return null;
@@ -132,10 +130,10 @@ export function EditDepenseDialog({
               <Label className="text-xs text-muted-foreground">N° d'ord</Label>
               <p className="font-mono font-semibold text-lg">{String(depense.numero_bon).padStart(4, '0')}</p>
             </div>
-            {depense.numero_beo && (
+            {formData.NBEO && (
               <div>
                 <Label className="text-xs text-muted-foreground">N° BEO</Label>
-                <p className="font-mono">{depense.numero_beo}</p>
+                <p className="font-mono">{formData.NBEO}</p>
               </div>
             )}
           </div>
@@ -155,16 +153,15 @@ export function EditDepenseDialog({
 
             {/* N°BEO */}
             <div className="space-y-2">
-              <Label htmlFor="numero_beo">N°BEO (4 chiffres)</Label>
+              <Label htmlFor="NBEO">N°BEO</Label>
               <Input
-                id="numero_beo"
-                value={formData.numero_beo}
+                id="NBEO"
+                value={formData.NBEO}
                 onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '').slice(0, 4);
-                  setFormData(prev => ({ ...prev, numero_beo: value }));
+                  const value = e.target.value;
+                  setFormData(prev => ({ ...prev, NBEO: value }));
                 }}
-                placeholder="0000"
-                maxLength={4}
+                placeholder="N° BEO"
               />
             </div>
 
@@ -198,11 +195,11 @@ export function EditDepenseDialog({
 
             {/* Code IMP */}
             <div className="space-y-2">
-              <Label htmlFor="imp">Code IMP *</Label>
+              <Label htmlFor="imp_code">Code IMP *</Label>
               <Input
-                id="imp"
-                value={formData.imp}
-                onChange={(e) => setFormData(prev => ({ ...prev, imp: e.target.value }))}
+                id="imp_code"
+                value={formData.imp_code}
+                onChange={(e) => setFormData(prev => ({ ...prev, imp_code: e.target.value }))}
                 placeholder="Code IMP"
                 required
               />

@@ -445,7 +445,14 @@ export default function FeuilleCaisseReportPage() {
     const totalDepenses = filteredData.reduce((s, r) => s + (r.depense || 0), 0);
     const solde = totalRecettes - totalDepenses;
     const balance = soldePrecedent + solde;
-    const totalEnLettres = `${numberToFrenchWords(Math.floor(Math.abs(solde)))} Francs Congolais`;
+    // Montant en lettres avec centimes : "Francs Congolais: ... et XX centime"
+    const absSolde = Math.abs(solde);
+    const partieEntiere = Math.floor(absSolde);
+    const centimes = Math.round((absSolde - partieEntiere) * 100);
+    let totalEnLettres = `Francs Congolais:  ${numberToFrenchWords(partieEntiere)}`;
+    if (centimes > 0) {
+      totalEnLettres += ` et ${numberToFrenchWords(centimes)} centime`;
+    }
 
     if (params.exportType === 'print') {
       const printWindow = window.open('', '_blank');

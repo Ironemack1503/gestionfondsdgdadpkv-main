@@ -494,20 +494,32 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
   const totalR = data.reduce((s, i) => s + (i.recette || 0), 0);
   const totalD = data.reduce((s, i) => s + (i.depense || 0), 0);
   const solde = totalR - totalD;
-  const balance = soldeInitial + solde;
 
   // TOTAL
   bodyRows.push([{ content: 'TOTAL :', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, fmtNum(totalR), fmtNum(totalD), '']);
   rowStyles[rowIdx] = { fontStyle: 'bold' };
   rowIdx++;
 
-  // ENCAISSE
-  bodyRows.push([{ content: 'ENCAISSE :', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, { content: fmtNum(solde), colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, '']);
+  // ENCAISSE (deux colonnes : côté recettes = 0, côté dépenses = solde)
+  const encaisse = solde > 0 ? solde : 0; // encaisse = recettes - dépenses si positif
+  bodyRows.push([
+    { content: 'ENCAISSE :', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: '', styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(encaisse), styles: { halign: 'right', fontStyle: 'bold' } },
+    '',
+  ]);
   rowStyles[rowIdx] = { fontStyle: 'bold' };
   rowIdx++;
 
-  // BALANCE
-  bodyRows.push([{ content: 'BALANCE :', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, { content: fmtNum(balance), colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, '']);
+  // BALANCE (deux colonnes : TOTAL + ENCAISSE par côté)
+  const balanceRecettes = totalR;
+  const balanceDepenses = totalD + encaisse;
+  bodyRows.push([
+    { content: 'BALANCE :', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(balanceRecettes), styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(balanceDepenses), styles: { halign: 'right', fontStyle: 'bold' } },
+    '',
+  ]);
   rowStyles[rowIdx] = { fontStyle: 'bold' };
   rowIdx++;
 
@@ -516,8 +528,8 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
     head: [
       [
         { content: 'Date', styles: { halign: 'center' } },
-        { content: 'N°ORD', styles: { halign: 'center' } },
-        { content: 'N°BEO', styles: { halign: 'center' } },
+        { content: 'N°ORD', styles: { halign: 'center', fontSize: 7 } },
+        { content: 'N°BEO', styles: { halign: 'center', fontSize: 7 } },
         { content: 'LIBELLE', styles: { halign: 'center' } },
         { content: 'MONTANT', colSpan: 3, styles: { halign: 'center' } },
       ],
@@ -555,13 +567,13 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 18, halign: 'center' },
-      1: { cellWidth: 12, halign: 'center' },
-      2: { cellWidth: 16, halign: 'center' },
-      3: { cellWidth: 'auto' },
-      4: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
-      5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
-      6: { cellWidth: 18, halign: 'center' },
+      0: { cellWidth: 16, halign: 'center' },   // Date
+      1: { cellWidth: 11, halign: 'center' },   // N°ORD
+      2: { cellWidth: 11, halign: 'center' },   // N°BEO
+      3: { cellWidth: 'auto' },                  // LIBELLE
+      4: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },  // RECETTE
+      5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },  // DEPENSE
+      6: { cellWidth: 14, halign: 'center' },   // IMP
     },
     didParseCell: function(hookData) {
       const r = hookData.row.index;
@@ -571,7 +583,7 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
         if (st.fontStyle) hookData.cell.styles.fontStyle = st.fontStyle as any;
       }
     },
-    margin: { top: 14, right: 2, bottom: 40, left: 2 },
+    margin: { top: 14, right: 5, bottom: 40, left: 5 },
   });
 
   // 6. Après le tableau : "Nous disons", date, signature
@@ -604,16 +616,16 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
 
   doc.setFont('courier', 'normal');
   doc.setFontSize(10);
-  doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth / 2, y, { align: 'center' });
+  doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth - 5, y, { align: 'right' });
   y += 12;
 
   doc.setFont('courier', 'bold');
-  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth / 2, y, { align: 'center' });
+  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth - 5, y, { align: 'right' });
   y += 10;
 
   doc.setFont('courier', 'bold');
   doc.setFontSize(10);
-  doc.text(nomComptable, pageWidth / 2, y, { align: 'center' });
+  doc.text(nomComptable, pageWidth - 17, y, { align: 'right' });
 
   // 7. Footer sur toutes les pages
   const pageCount = doc.getNumberOfPages();

@@ -93,16 +93,13 @@ export function EditRecetteDialog({
     await onSave({
       id: recette.id,
       date_transaction: formData.date_transaction,
-      numero_beo: formData.numero_beo || null,
       libelle: formData.libelle,
       provenance: formData.provenance,
       motif: formData.motif,
       montant: parseFloat(formData.montant),
       montant_lettre: formData.montant_lettre,
-      imp: formData.imp,
       observation: formData.observation,
-      service_id: formData.service_id || null,
-    });
+    } as any);
   };
 
   if (!recette) return null;

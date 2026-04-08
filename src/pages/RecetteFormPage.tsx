@@ -19,6 +19,7 @@ import { formatMontant } from "@/lib/utils";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { EditRecetteDialog, ViewTransactionDialog } from "@/components/dialogs";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,8 +53,9 @@ export default function RecetteFormPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { rubriques } = useRubriques();
-  const { recettes, isLoading, createRecette, deleteRecette: deleteRecetteMutation } = useRecettes();
+  const { recettes, isLoading, createRecette, updateRecette, deleteRecette: deleteRecetteMutation } = useRecettes();
   const { isInstructeur, isAdmin, loading: roleLoading } = useLocalUserRole();
+  const queryClient = useQueryClient();
   
   // Debug: afficher les recettes chargées
   console.log('📊 RecetteFormPage - Recettes chargées:', recettes?.length || 0, recettes);
@@ -232,6 +234,46 @@ export default function RecetteFormPage() {
     }
   };
 
+  // Filtrage des recettes côté SERVEUR (requête Supabase avec filtres date)
+  const { data: searchResults = [], isLoading: isSearching } = useQuery({
+    queryKey: ['recettes-search', searchQuery, searchPeriod.startDate, searchPeriod.endDate],
+    queryFn: async () => {
+      let query = supabase
+        .from('recettes')
+        .select(`
+          id, numero_bon, date_transaction, heure,
+          provenance, motif, montant, montant_lettre, observation,
+          user_id, created_at, updated_at, libelle
+        `)
+        .order('date_transaction', { ascending: false })
+        .order('heure', { ascending: false });
+
+      // Filtre par période côté serveur
+      if (searchPeriod.startDate) {
+        query = query.gte('date_transaction', searchPeriod.startDate);
+      }
+      if (searchPeriod.endDate) {
+        query = query.lte('date_transaction', searchPeriod.endDate);
+      }
+
+      // Filtre textuel côté serveur
+      if (searchQuery) {
+        query = query.or(
+          `motif.ilike.%${searchQuery}%,libelle.ilike.%${searchQuery}%`
+        );
+      }
+
+      query = query.limit(500);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(d => ({ ...d, date: d.date_transaction })) as Recette[];
+    },
+    enabled: activeTab === 'list',
+  });
+
+  const filteredRecettes = searchResults;
+
   // Vérification des droits d'accès
   if (roleLoading || isLoading) {
     return (
@@ -258,21 +300,6 @@ export default function RecetteFormPage() {
       </div>
     );
   }
-
-  // Filtrage des recettes
-  const filteredRecettes = (recettes || []).filter(recette => {
-    // Filtre par recherche textuelle seulement (pas de filtre de date)
-    if (!searchQuery) return true;
-    
-    const query = searchQuery.toLowerCase();
-    return (
-      recette.motif?.toLowerCase().includes(query) ||
-      recette.numero_bon?.toString().includes(query) ||
-      recette.numero_beo?.toLowerCase().includes(query) ||
-      recette.provenance?.toLowerCase().includes(query) ||
-      recette.montant?.toString().includes(query)
-    );
-  });
 
   const handleEdit = (recette: Recette) => {
     setSelectedRecette(recette);
@@ -634,7 +661,7 @@ export default function RecetteFormPage() {
             <div className="p-4 border rounded-lg">
               <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <FileText className="h-4 h-4" />
-                <span className="text-sm">Total recettes</span>
+                <span className="text-sm">Total recettes (base)</span>
               </div>
               <p className="text-2xl font-bold">{recettes?.length || 0}</p>
             </div>
@@ -644,7 +671,9 @@ export default function RecetteFormPage() {
                 <Search className="h-4 w-4" />
                 <span className="text-sm">Résultats trouvés</span>
               </div>
-              <p className="text-2xl font-bold">{filteredRecettes.length}</p>
+              <p className="text-2xl font-bold">
+                {isSearching ? <Loader2 className="h-5 w-5 animate-spin inline" /> : filteredRecettes.length}
+              </p>
             </div>
             
             <div className="p-4 border rounded-lg">
@@ -679,10 +708,16 @@ export default function RecetteFormPage() {
           recette={selectedRecette}
           open={isEditDialogOpen}
           onOpenChange={setIsEditDialogOpen}
-          onSave={async () => {
+          onSave={async (data) => {
+            if (data?.id) {
+              await updateRecette.mutateAsync(data as any);
+              queryClient.invalidateQueries({ queryKey: ['recettes-search'] });
+              queryClient.invalidateQueries({ queryKey: ['report-data'] });
+            }
             setIsEditDialogOpen(false);
             setSelectedRecette(null);
           }}
+          isLoading={updateRecette.isPending}
         />
       )}
       
