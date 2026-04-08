@@ -207,7 +207,7 @@ const addPDFFooter = (doc: jsPDF, pageNumber: number, totalPages: number, settin
       // Dimensions proportionnelles : image source ~940x70px → hauteur ≈20mm
       const imgH = 18;
       const imgY = pageHeight - imgH - 5;
-      doc.addImage(logoPiedPage, 'PNG', 14, imgY, pageWidth - 28, imgH);
+      doc.addImage(logoPiedPage, 'PNG', 5, imgY, pageWidth - 10, imgH);
     } catch {
       // Fallback textuel si l'image échoue
       const footerStartY = pageHeight - 28;
@@ -216,7 +216,7 @@ const addPDFFooter = (doc: jsPDF, pageNumber: number, totalPages: number, settin
       doc.setTextColor(0, 0, 0);
       doc.setDrawColor(0, 0, 0);
       doc.setLineWidth(0.4);
-      doc.line(14, footerStartY - 2, pageWidth - 14, footerStartY - 2);
+      doc.line(5, footerStartY - 2, pageWidth - 5, footerStartY - 2);
       doc.text(DEFAULT_FOOTER_SLOGAN, pageWidth / 2, footerStartY + 2, { align: 'center' });
       doc.setFontSize(6.5);
       doc.setFont('times', 'normal');
@@ -237,10 +237,10 @@ const addPDFFooter = (doc: jsPDF, pageNumber: number, totalPages: number, settin
     const now = new Date();
     const dateStr = now.toLocaleDateString('fr-FR');
     const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    doc.text(`Imprimé le : ${dateStr} ; ${timeStr}`, 14, bottomY);
+    doc.text(`Imprimé le : ${dateStr} ; ${timeStr}`, 5, bottomY);
   }
   
-  doc.text(`Page ${pageNumber} / ${totalPages}`, pageWidth - 14, bottomY, { align: 'right' });
+  doc.text(`Page ${pageNumber} / ${totalPages}`, pageWidth - 5, bottomY, { align: 'right' });
 };
 
 // Helper to convert hex to RGB
@@ -260,7 +260,7 @@ const addPDFHeader = async (doc: jsPDF, settings: PDFExportSettings): Promise<nu
   try {
     // Image source ~940x70px → hauteur ~18mm
     const imgH = 18;
-    doc.addImage(logoEntete, 'PNG', 14, yPos, pageWidth - 28, imgH);
+    doc.addImage(logoEntete, 'PNG', 5, yPos, pageWidth - 10, imgH);
     yPos += imgH + 4;
   } catch {
     // Fallback textuel si l'image échoue
@@ -287,10 +287,10 @@ const addPDFHeader = async (doc: jsPDF, settings: PDFExportSettings): Promise<nu
   doc.setTextColor(0, 0, 0);
   const bcText = 'BUREAU  COMPTABLE';
   const bcWidth = doc.getTextWidth(bcText);
-  doc.text(bcText, 14, yPos);
+  doc.text(bcText, 5, yPos);
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.4);
-  doc.line(14, yPos + 1, 14 + bcWidth, yPos + 1);
+  doc.line(5, yPos + 1, 5 + bcWidth, yPos + 1);
   yPos += 8;
 
   return yPos;
@@ -604,16 +604,16 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
 
   doc.setFont('courier', 'normal');
   doc.setFontSize(10);
-  doc.text(`Fait \u00e0 Kinshasa, le ${dateFeuille}`, pageWidth - 10, y, { align: 'right' });
+  doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth / 2, y, { align: 'center' });
+  y += 12;
+
+  doc.setFont('courier', 'bold');
+  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth / 2, y, { align: 'center' });
   y += 10;
 
   doc.setFont('courier', 'bold');
-  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth - 10, y, { align: 'right' });
-  y += 8;
-
-  doc.setFont('courier', 'bold');
   doc.setFontSize(10);
-  doc.text(nomComptable, pageWidth - 10, y, { align: 'right' });
+  doc.text(nomComptable, pageWidth / 2, y, { align: 'center' });
 
   // 7. Footer sur toutes les pages
   const pageCount = doc.getNumberOfPages();
@@ -659,15 +659,23 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
   // 1. En-tête officiel DGDA
   const headerEndY = await addPDFHeader(doc, settings);
 
-  // 2. Titre centré
-  doc.setFontSize(11);
+  // 2. Titre aligné à droite + Direction à gauche (format Crystal Reports)
+  doc.setFontSize(12);
   doc.setFont('courier', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text(`SOMMAIRE DU MOIS DE ${moisLabel.toUpperCase()} ${annee}`, pageWidth / 2, headerEndY - 3, { align: 'center' });
-  doc.setFontSize(9);
-  doc.setFont('courier', 'normal');
-  doc.text('Direction Provinciale Kinshasa-Ville', pageWidth / 2, headerEndY + 2, { align: 'center' });
-  doc.text(`DGDA/3400/DP/KV/SDAF/   /${annee}`, pageWidth / 2, headerEndY + 7, { align: 'center' });
+  doc.text(`SOMMAIRE DU MOIS DE`, pageWidth - 5, headerEndY - 3, { align: 'right' });
+  doc.text(`${moisLabel.toUpperCase()} ${annee}`, pageWidth - 5, headerEndY + 4, { align: 'right' });
+
+  // Direction Provinciale — à gauche, italique cursive
+  doc.setFontSize(11);
+  doc.setFont('times', 'bolditalic');
+  doc.text('Direction Provinciale', 5, headerEndY + 3);
+  doc.text('   Kinshasa-Ville', 5, headerEndY + 8);
+
+  // Référence DGDA — à gauche, courier bold
+  doc.setFontSize(10);
+  doc.setFont('courier', 'bold');
+  doc.text(`DGDA/3400/DP/KV/SDAF/          /${annee}`, 5, headerEndY + 16);
 
   const fmtNum = (n: number) => formatMontant(n);
 
@@ -737,12 +745,11 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
       [
         { content: '', colSpan: 2 },
         { content: 'RECETTES', styles: { halign: 'center' } },
-        { content: 'DEPENSES', styles: { halign: 'center' } },
       ],
     ],
     body: bodyRows,
     showHead: 'firstPage',
-    startY: headerEndY + 13,
+    startY: headerEndY + 21,
     styles: {
       fontSize: 8,
       font: 'courier',
@@ -767,12 +774,12 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 18, halign: 'center' },
-      1: { cellWidth: 'auto' },
-      2: { cellWidth: 35, halign: 'right' },
-      3: { cellWidth: 35, halign: 'right' },
+      0: { cellWidth: 16, halign: 'center' },
+      1: { cellWidth: 108, overflow: 'ellipsize' },
+      2: { cellWidth: 38, halign: 'right' },
+      3: { cellWidth: 38, halign: 'right' },
     },
-    margin: { top: 14, right: 2, bottom: 40, left: 2 },
+    margin: { top: 14, right: 5, bottom: 30, left: 5 },
   });
 
   // 5. Bloc signature
@@ -789,25 +796,25 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
   doc.setFontSize(10);
   const labelND = 'Nous disons :  ';
   const labelWidth = doc.getTextWidth(labelND);
-  const contentWidth = pageWidth - 28 - labelWidth;
+  const contentWidth = pageWidth - 10 - labelWidth;
   const montantLines = doc.splitTextToSize(encaisseEnLettres, contentWidth);
-  doc.text(labelND + montantLines[0], 14, y);
+  doc.text(labelND + montantLines[0], 5, y);
   for (let li = 1; li < montantLines.length; li++) {
     y += 5;
-    doc.text(montantLines[li], 14 + labelWidth, y);
+    doc.text(montantLines[li], 5 + labelWidth, y);
   }
   y += 8;
 
   doc.setFont('courier', 'normal');
   doc.setFontSize(10);
-  doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth - 10, y, { align: 'right' });
-  y += 10;
+  doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth / 2, y, { align: 'center' });
+  y += 12;
 
   doc.setFont('courier', 'bold');
-  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth - 10, y, { align: 'right' });
-  y += 8;
+  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth / 2, y, { align: 'center' });
+  y += 10;
 
-  doc.text(nomComptable || '____________________', pageWidth - 10, y, { align: 'right' });
+  doc.text(nomComptable || '____________________', pageWidth / 2, y, { align: 'center' });
 
   // 6. Footer sur toutes les pages
   const pageCount2 = doc.getNumberOfPages();
@@ -817,6 +824,180 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
   }
 
   doc.save(`sommaire_${moisLabel.toLowerCase()}_${annee}.pdf`);
+};
+
+// ===================== PROGRAMMATION PDF =====================
+
+export interface ProgrammationPDFRow {
+  libelle: string;
+  montant: number;
+}
+
+export interface ProgrammationPDFOptions {
+  rows: ProgrammationPDFRow[];
+  moisLabel: string;
+  annee: string;
+  dateProgrammation: string;
+  nomDAF: string;
+  nomDP: string;
+  montantEnLettres: string;
+}
+
+export const exportProgrammationPDF = async (options: ProgrammationPDFOptions): Promise<void> => {
+  const { rows, moisLabel, annee, dateProgrammation, nomDAF, nomDP, montantEnLettres } = options;
+  const settings = defaultPDFSettings;
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width;
+
+  // 1. En-tête officiel DGDA
+  const headerEndY = await addPDFHeader(doc, settings);
+
+  // 2. Titre centré
+  doc.setFontSize(11);
+  doc.setFont('courier', 'bold');
+  // 2. Titre aligné à droite + Direction à gauche (format Crystal Reports)
+  doc.setFontSize(12);
+  doc.setFont('courier', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text('PROGRAMATION DES', pageWidth - 5, headerEndY - 3, { align: 'right' });
+  doc.text(`DEPENSES MOIS DE`, pageWidth - 5, headerEndY + 4, { align: 'right' });
+  doc.text(`${moisLabel.toUpperCase()} ${annee}`, pageWidth - 5, headerEndY + 11, { align: 'right' });
+
+  // Direction Provinciale — à gauche, italique cursive
+  doc.setFontSize(11);
+  doc.setFont('times', 'bolditalic');
+  doc.text('Direction Provinciale', 5, headerEndY + 3);
+  doc.text('   Kinshasa-Ville', 5, headerEndY + 8);
+
+  // Référence DGDA — à gauche, courier bold
+  doc.setFontSize(10);
+  doc.setFont('courier', 'bold');
+  doc.text(`DGDA/3400/DP/KV/SDAF/          /${annee}`, 5, headerEndY + 16);
+
+  const fmtNum = (n: number) => formatMontant(n);
+
+  // 3. Body du tableau
+  const bodyRows: any[][] = rows.map((row, i) => [
+    { content: String(i + 1), styles: { halign: 'center', fontStyle: 'bold' } },
+    { content: row.libelle, styles: { fontStyle: 'bold' } },
+    { content: fmtNum(row.montant), styles: { halign: 'right', fontStyle: 'bold' } },
+  ]);
+
+  // Total
+  const total = rows.reduce((s, r) => s + r.montant, 0);
+  bodyRows.push([
+    { content: 'MONTANTS TOTAL', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(total), styles: { halign: 'right', fontStyle: 'bold' } },
+  ]);
+
+  // 4. Tableau
+  autoTable(doc, {
+    head: [
+      [
+        { content: 'N°.', styles: { halign: 'center' } },
+        { content: 'LIBELLE', styles: { halign: 'center' } },
+        { content: 'MONTANTS', styles: { halign: 'center' } },
+      ],
+    ],
+    body: bodyRows,
+    showHead: 'firstPage',
+    startY: headerEndY + 21,
+    styles: {
+      fontSize: 8,
+      font: 'courier',
+      cellPadding: 1.5,
+      lineColor: [0, 0, 0],
+      lineWidth: 0.2,
+      textColor: [0, 0, 0],
+      overflow: 'ellipsize',
+      minCellHeight: 4,
+    },
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      halign: 'center',
+      fontSize: 8,
+    },
+    bodyStyles: {
+      fillColor: [255, 255, 255],
+    },
+    alternateRowStyles: {
+      fillColor: [255, 255, 255],
+    },
+    columnStyles: {
+      0: { cellWidth: 12, halign: 'center' },
+      1: { cellWidth: 'auto', overflow: 'ellipsize' },
+      2: { cellWidth: 38, halign: 'right' },
+    },
+    margin: { top: 14, right: 5, bottom: 30, left: 5 },
+  });
+
+  // 5. Bloc signature
+  const finalY = (doc as any).lastAutoTable?.finalY || 200;
+  const pageHeight = doc.internal.pageSize.height;
+  let y = finalY + 6;
+
+  if (y + 60 > pageHeight - 35) {
+    doc.addPage();
+    y = 20;
+  }
+
+  // Nous disons
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(10);
+  const labelND = 'Nous disons :  ';
+  const labelWidth = doc.getTextWidth(labelND);
+  const contentWidth = pageWidth - 10 - labelWidth;
+  const montantLines = doc.splitTextToSize(montantEnLettres, contentWidth);
+  doc.text(labelND + montantLines[0], 5, y);
+  for (let li = 1; li < montantLines.length; li++) {
+    y += 5;
+    doc.text(montantLines[li], 5 + labelWidth, y);
+  }
+  y += 8;
+
+  // Date et lieu
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Fait à Kinshasa, le ${dateProgrammation}`, pageWidth / 2, y, { align: 'center' });
+  y += 15;
+
+  // Double signature — deux colonnes centrées
+  const leftCenterX = pageWidth / 4;
+  const rightCenterX = (pageWidth / 4) * 3;
+  const colW = (pageWidth / 2) - 10;
+
+  // Titres des signataires
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(8);
+  const leftTitle = "LE SOUS-DIRECTEUR CHARGE DE\nL'ADMINISTRATION ET DES FINANCES";
+  const rightTitle = "LE DIRECTEUR CHARGER PROVINCIAL";
+  const leftTitleLines = doc.splitTextToSize(leftTitle, colW);
+  const rightTitleLines = doc.splitTextToSize(rightTitle, colW);
+  leftTitleLines.forEach((line: string, i: number) => {
+    doc.text(line, leftCenterX, y + i * 4, { align: 'center' });
+  });
+  rightTitleLines.forEach((line: string, i: number) => {
+    doc.text(line, rightCenterX, y + i * 4, { align: 'center' });
+  });
+
+  // Noms des signataires
+  const maxTitleLines = Math.max(leftTitleLines.length, rightTitleLines.length);
+  y += maxTitleLines * 4 + 15;
+  doc.setFontSize(10);
+  doc.text(nomDAF || '____________________', leftCenterX, y, { align: 'center' });
+  doc.text(nomDP || '____________________', rightCenterX, y, { align: 'center' });
+
+  // 6. Footer sur toutes les pages
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    addPDFFooter(doc, i, pageCount, settings);
+  }
+
+  doc.save(`programmation_${moisLabel.toLowerCase()}_${annee}.pdf`);
 };
 
 export const exportToExcel = ({ title, filename, columns, data, subtitle, pdfSettings, headerLines, footerLines }: ExportOptions): void => {

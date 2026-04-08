@@ -427,6 +427,51 @@ export type Database = {
         }
         Relationships: []
       }
+      programmation_depenses: {
+        Row: {
+          id: number
+          numero: number | null
+          libelle: string | null
+          montant: number | null
+          mois: string | null
+          annee: string | null
+          code: string | null
+          comptable: string | null
+          daf: string | null
+          dp: string | null
+          date_programmation: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          numero?: number | null
+          libelle?: string | null
+          montant?: number | null
+          mois?: string | null
+          annee?: string | null
+          code?: string | null
+          comptable?: string | null
+          daf?: string | null
+          dp?: string | null
+          date_programmation?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          numero?: number | null
+          libelle?: string | null
+          montant?: number | null
+          mois?: string | null
+          annee?: string | null
+          code?: string | null
+          comptable?: string | null
+          daf?: string | null
+          dp?: string | null
+          date_programmation?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       programmations: {
         Row: {
           annee: number
