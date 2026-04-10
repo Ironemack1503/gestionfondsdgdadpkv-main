@@ -1,11 +1,12 @@
 import { useState, useMemo } from "react";
-import { Plus, Search, Edit, Trash2, Loader2, FileDown, FileSpreadsheet, Settings, User, Users } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Loader2, FileDown, FileSpreadsheet, Settings, Pencil } from "lucide-react";
 import { formatMontant } from "@/lib/utils";
 import { TableSkeleton, SummaryCardSkeleton } from "@/components/shared/Skeletons";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +33,6 @@ import {
 } from "@/components/ui/table";
 import { useProgrammations, Programmation } from "@/hooks/useProgrammations";
 import { useLocalUserRole } from "@/hooks/useLocalUserRole";
-import { useLocalAuth } from "@/contexts/LocalAuthContext";
 import { exportToExcel } from "@/lib/exportUtils";
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -46,7 +46,7 @@ const DGDA_FOOTER_LINE4 = "Email : info@douane.gouv.cd ; contact@douane.gouv.cd 
 
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
-const years = [currentYear - 1, currentYear, currentYear + 1];
+const years = [2022, 2023, 2024, 2025, currentYear, currentYear + 1].filter((v, i, a) => a.indexOf(v) === i).sort();
 const months = [
   { value: 1, label: "Janvier" },
   { value: 2, label: "Février" },
@@ -123,10 +123,9 @@ const numberToFrenchWords = (num: number): string => {
 };
 
 export default function ProgrammationPage() {
-  const { programmations, isLoading, formatMois, moisNoms, createProgrammation, updateProgrammation, deleteProgrammation, getProgrammationsByMonthYear } = useProgrammations();
-  const { isAdmin, isInstructeur } = useLocalUserRole();
-  const { user } = useLocalAuth();
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<'list' | 'edit'>('list');
+  const [editSearchQuery, setEditSearchQuery] = useState("");
   const [selectedMois, setSelectedMois] = useState(String(currentMonth));
   const [selectedAnnee, setSelectedAnnee] = useState(String(currentYear));
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -138,7 +137,7 @@ export default function ProgrammationPage() {
     montantPrevu: "",
   });
   const [exportSettings, setExportSettings] = useState({
-    programmationName: "", // Nom de la programmation (ex: EVE, LUMUMBA)
+    programmationName: "",
     directionProvinciale: "Direction Provinciale Kin - Ville",
     referenceNumber: "",
     sousDirecteurTitre: "LE SOUS-DIRECTEUR CHARGE DE L'ADMINISTRATION ET DES FINANCES",
@@ -146,40 +145,24 @@ export default function ProgrammationPage() {
     directeurTitre: "LE DIRECTEUR PROVINCIAL",
     directeurNom: "KALALA MASIMANGO",
     lieuSignature: "Kinshasa",
-    exportMode: "own" as "own" | "merged", // own = ma programmation, merged = toutes les programmations
+    exportMode: "merged" as "own" | "merged",
   });
+
+  const { programmations, isLoading, formatMois, moisNoms, createProgrammation, updateProgrammation, deleteProgrammation } = useProgrammations(parseInt(selectedMois), parseInt(selectedAnnee));
+  const { isAdmin, isInstructeur } = useLocalUserRole();
 
   const canManage = isAdmin || isInstructeur;
 
-  // Filter programmations by selected month/year and search
+  // Filter by search query (data already filtered by month/year from hook)
   const filteredProgrammations = useMemo(() => {
-    const mois = parseInt(selectedMois);
-    const annee = parseInt(selectedAnnee);
-    return getProgrammationsByMonthYear(mois, annee).filter(
-      (p) => p.designation.toLowerCase().includes(searchQuery.toLowerCase())
+    if (!searchQuery.trim()) return programmations;
+    return programmations.filter(
+      (p) => (p.libelle || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [programmations, selectedMois, selectedAnnee, searchQuery, getProgrammationsByMonthYear]);
+  }, [programmations, searchQuery]);
 
-  // Get all programmations for selected month/year (for counts and merged export)
-  const allMonthProgrammations = useMemo(() => {
-    const mois = parseInt(selectedMois);
-    const annee = parseInt(selectedAnnee);
-    return getProgrammationsByMonthYear(mois, annee);
-  }, [programmations, selectedMois, selectedAnnee, getProgrammationsByMonthYear]);
-
-  // Get user's own programmations for selected month/year
-  const ownProgrammations = useMemo(() => {
-    if (!user?.id) return [];
-    return allMonthProgrammations.filter(p => p.user_id === user.id);
-  }, [allMonthProgrammations, user?.id]);
-
-  // Get programmations for export based on export mode
-  const getExportProgrammations = useMemo(() => {
-    if (exportSettings.exportMode === "own") {
-      return ownProgrammations;
-    }
-    return allMonthProgrammations;
-  }, [allMonthProgrammations, ownProgrammations, exportSettings.exportMode]);
+  // Export uses all programmations for the month
+  const getExportProgrammations = programmations;
 
   const handleOpenCreate = () => {
     setEditingProgrammation(null);
@@ -190,8 +173,8 @@ export default function ProgrammationPage() {
   const handleOpenEdit = (prog: Programmation) => {
     setEditingProgrammation(prog);
     setFormData({
-      libelle: prog.designation,
-      montantPrevu: String(prog.montant_prevu),
+      libelle: prog.libelle || '',
+      montantPrevu: String(prog.montant || 0),
     });
     setIsDialogOpen(true);
   };
@@ -202,15 +185,15 @@ export default function ProgrammationPage() {
     if (editingProgrammation) {
       await updateProgrammation.mutateAsync({
         id: editingProgrammation.id,
-        designation: formData.libelle,
-        montant_prevu: parseFloat(formData.montantPrevu),
+        libelle: formData.libelle,
+        montant: parseFloat(formData.montantPrevu),
       });
     } else {
       await createProgrammation.mutateAsync({
         mois: parseInt(selectedMois),
         annee: parseInt(selectedAnnee),
-        designation: formData.libelle,
-        montant_prevu: parseFloat(formData.montantPrevu),
+        libelle: formData.libelle,
+        montant: parseFloat(formData.montantPrevu),
       });
     }
 
@@ -219,19 +202,14 @@ export default function ProgrammationPage() {
     setIsDialogOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
     if (confirm("Êtes-vous sûr de vouloir supprimer cette programmation ?")) {
       await deleteProgrammation.mutateAsync(id);
     }
   };
 
-  const filteredTotal = filteredProgrammations.reduce((acc, p) => acc + Number(p.montant_prevu), 0);
+  const filteredTotal = filteredProgrammations.reduce((acc, p) => acc + Number(p.montant || 0), 0);
   const totalInWords = numberToFrenchWords(Math.floor(filteredTotal));
-
-  // Get user name for export
-  const getUserFullName = () => {
-    return user?.full_name || user?.username || 'Utilisateur';
-  };
 
   const openExportDialog = (type: 'pdf' | 'excel') => {
     setExportType(type);
@@ -252,7 +230,7 @@ export default function ProgrammationPage() {
 
     // Use export programmations based on mode
     const exportData = getExportProgrammations;
-    const exportTotal = exportData.reduce((acc, p) => acc + Number(p.montant_prevu), 0);
+    const exportTotal = exportData.reduce((acc, p) => acc + Number(p.montant || 0), 0);
     
     // Format centimes
     const totalEntier = Math.floor(exportTotal);
@@ -298,9 +276,9 @@ export default function ProgrammationPage() {
     // ============= TABLEAU PRINCIPAL =============
     // Prepare table data
     const tableData = exportData.map((p, index) => [
-      String(p.numero_ordre || index + 1),
-      p.designation,
-      Number(p.montant_prevu).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      String(p.numero || index + 1),
+      p.libelle || '',
+      Number(p.montant || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     ]);
 
     // Add table with official styling
@@ -311,11 +289,13 @@ export default function ProgrammationPage() {
       theme: 'grid',
       styles: {
         font: 'times',
-        fontSize: 10,
-        cellPadding: 3,
+        fontSize: 9,
+        fontStyle: 'bold',
+        cellPadding: 1,
         lineColor: [0, 0, 0],
         lineWidth: 0.3,
         textColor: [0, 0, 0],
+        overflow: 'ellipsize',
       },
       headStyles: {
         fillColor: [255, 255, 255],
@@ -328,10 +308,11 @@ export default function ProgrammationPage() {
         fillColor: [255, 255, 255],
       },
       columnStyles: {
-        0: { cellWidth: 20, halign: 'center' },
+        0: { cellWidth: 16, halign: 'center' },
         1: { cellWidth: 'auto', halign: 'left' },
-        2: { cellWidth: 45, halign: 'right' },
+        2: { cellWidth: 40, halign: 'right' },
       },
+      margin: { left: 5, right: 5 },
     });
 
     // Get final Y position after table
@@ -425,7 +406,7 @@ export default function ProgrammationPage() {
 
     // Use export programmations based on mode
     const dataToExport = getExportProgrammations;
-    const exportTotal = dataToExport.reduce((acc, p) => acc + Number(p.montant_prevu), 0);
+    const exportTotal = dataToExport.reduce((acc, p) => acc + Number(p.montant || 0), 0);
     
     // Format centimes
     const totalEntier = Math.floor(exportTotal);
@@ -434,9 +415,9 @@ export default function ProgrammationPage() {
     const centimesInWords = centimes > 0 ? ` et ${numberToFrenchWords(centimes)} centimes` : '';
 
     const exportDataRows = dataToExport.map((p, index) => ({
-      numero: p.numero_ordre || index + 1,
-      libelle: p.designation,
-      montant: Number(p.montant_prevu).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      numero: p.numero || index + 1,
+      libelle: p.libelle || '',
+      montant: Number(p.montant || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     }));
 
     // Add total row
@@ -507,13 +488,21 @@ export default function ProgrammationPage() {
               Excel
             </Button>
             {canManage && (
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={handleOpenCreate}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Nouvelle programmation
-                  </Button>
-                </DialogTrigger>
+              <>
+                <Button
+                  variant={activeTab === 'edit' ? 'default' : 'outline'}
+                  onClick={() => setActiveTab(activeTab === 'edit' ? 'list' : 'edit')}
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Modifier programmation
+                </Button>
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={handleOpenCreate}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Nouvelle programmation
+                    </Button>
+                  </DialogTrigger>
                 <DialogContent className="sm:max-w-lg">
                   <DialogHeader>
                     <DialogTitle>
@@ -562,6 +551,7 @@ export default function ProgrammationPage() {
                   </form>
                 </DialogContent>
               </Dialog>
+              </>
             )}
           </div>
         }
@@ -580,50 +570,6 @@ export default function ProgrammationPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            {/* Export mode selection */}
-            <div className="space-y-3 p-4 border rounded-lg bg-primary/5 border-primary/20">
-              <h4 className="font-medium text-sm flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                Portée de l'export
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setExportSettings({...exportSettings, exportMode: "own"})}
-                  className={`p-3 rounded-lg border-2 transition-all text-left ${
-                    exportSettings.exportMode === "own" 
-                      ? "border-primary bg-primary/10" 
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 font-medium">
-                    <User className="w-4 h-4" />
-                    Ma programmation
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Exporter uniquement mes enregistrements ({ownProgrammations.length} lignes)
-                  </p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExportSettings({...exportSettings, exportMode: "merged"})}
-                  className={`p-3 rounded-lg border-2 transition-all text-left ${
-                    exportSettings.exportMode === "merged" 
-                      ? "border-primary bg-primary/10" 
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 font-medium">
-                    <Users className="w-4 h-4" />
-                    Toutes les programmations
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Fusionner les enregistrements de tous les utilisateurs ({allMonthProgrammations.length} lignes)
-                  </p>
-                </button>
-              </div>
-            </div>
-
             {/* Document info */}
             <div className="space-y-4 p-4 sm:p-6 border rounded-lg bg-muted/30">
               <h4 className="font-medium text-sm">Informations du document</h4>
@@ -784,6 +730,85 @@ export default function ProgrammationPage() {
         </div>
       )}
 
+      {/* Panneau Rechercher & Modifier */}
+      {activeTab === 'edit' && canManage && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Pencil className="w-5 h-5" />
+              Rechercher & Modifier une programmation
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher par libellé pour modifier..."
+                  className="pl-10"
+                  value={editSearchQuery}
+                  onChange={(e) => setEditSearchQuery(e.target.value)}
+                />
+              </div>
+              {editSearchQuery.trim() && (
+                <div className="border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="w-[60px] font-semibold">N°</TableHead>
+                        <TableHead className="font-semibold">Libellé</TableHead>
+                        <TableHead className="text-right font-semibold w-[150px]">Montant (FC)</TableHead>
+                        <TableHead className="w-[100px] font-semibold">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredProgrammations
+                        .filter(p => (p.libelle || '').toLowerCase().includes(editSearchQuery.toLowerCase()))
+                        .map((prog, index) => (
+                          <TableRow key={prog.id}>
+                            <TableCell className="font-medium">{prog.numero || index + 1}</TableCell>
+                            <TableCell>{prog.libelle}</TableCell>
+                            <TableCell className="text-right font-semibold whitespace-nowrap">
+                              {formatMontant(prog.montant || 0)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenEdit(prog)}
+                                >
+                                  <Edit className="w-4 h-4 mr-1" />
+                                  Modifier
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive"
+                                  onClick={() => handleDelete(prog.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      {filteredProgrammations.filter(p => (p.libelle || '').toLowerCase().includes(editSearchQuery.toLowerCase())).length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
+                            Aucune programmation trouvée
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Table */}
       {isLoading ? (
         <TableSkeleton columns={4} rows={6} />
@@ -809,10 +834,10 @@ export default function ProgrammationPage() {
                 <>
                   {filteredProgrammations.map((prog, index) => (
                     <TableRow key={prog.id}>
-                      <TableCell className="font-medium">{prog.numero_ordre || index + 1}</TableCell>
-                      <TableCell>{prog.designation}</TableCell>
+                      <TableCell className="font-medium">{prog.numero || index + 1}</TableCell>
+                      <TableCell>{prog.libelle}</TableCell>
                       <TableCell className="text-right font-semibold whitespace-nowrap">
-                        {formatMontant(prog.montant_prevu)}
+                        {formatMontant(prog.montant || 0)}
                       </TableCell>
                       {canManage && (
                         <TableCell>

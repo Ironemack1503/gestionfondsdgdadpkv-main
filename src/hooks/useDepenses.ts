@@ -154,6 +154,9 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       queryClient.invalidateQueries({ queryKey: ['depenses-count'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
+      queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['solde-precedent-sommaire'] });
+      queryClient.invalidateQueries({ queryKey: ['latest-data-date'] });
       toast({ title: 'Succès', description: 'Dépense enregistrée avec succès' });
     },
     onError: (error: Error) => {
@@ -177,6 +180,8 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       clearCache('depenses-page1');
       queryClient.invalidateQueries({ queryKey: ['depenses'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['solde-precedent-sommaire'] });
       toast({ title: 'Succès', description: 'Dépense mise à jour' });
     },
     onError: (error: Error) => {
@@ -198,6 +203,9 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       queryClient.invalidateQueries({ queryKey: ['depenses'] });
       queryClient.invalidateQueries({ queryKey: ['depenses-count'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['solde-precedent-sommaire'] });
+      queryClient.invalidateQueries({ queryKey: ['latest-data-date'] });
       toast({ title: 'Succès', description: 'Dépense supprimée' });
     },
     onError: (error: Error) => {

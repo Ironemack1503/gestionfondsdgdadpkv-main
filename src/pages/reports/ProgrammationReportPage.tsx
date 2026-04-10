@@ -108,7 +108,7 @@ export default function ProgrammationReportPage() {
   const [nomDAF, setNomDAF] = useState('');
   const [nomDP, setNomDP] = useState('');
 
-  // Fetch data from programmation_depenses
+  // Fetch data from programmation_depenses (DETPGM)
   const moisDB = MOIS_DB[selectedMois] || '';
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['programmation-depenses', moisDB, selectedAnnee],
@@ -120,7 +120,7 @@ export default function ProgrammationReportPage() {
         .eq('annee', selectedAnnee)
         .order('numero', { ascending: true });
       if (error) throw error;
-      return (data || []) as Array<{
+      return (data || []) as unknown as Array<{
         id: number;
         numero: number | null;
         libelle: string | null;
@@ -156,7 +156,13 @@ export default function ProgrammationReportPage() {
     const moisLabel = MOIS_NOMS[exportMois - 1];
     const daf = nomDAF.trim() || defaultDAF || '____________________';
     const dp = nomDP.trim() || defaultDP || '____________________';
-    const montantEnLettres = `${numberToFrenchWords(Math.floor(total))} Francs Congolais`;
+    const absTotal2 = Math.abs(total);
+    const partieEntiere2 = Math.floor(absTotal2);
+    const centimes2 = Math.round((absTotal2 - partieEntiere2) * 100);
+    let montantEnLettres = `Francs Congolais:  ${numberToFrenchWords(partieEntiere2)}`;
+    if (centimes2 > 0) {
+      montantEnLettres += ` et ${numberToFrenchWords(centimes2)} centime`;
+    }
 
     const tdStyle = 'border:1px solid #000;padding:2px 5px;font-weight:bold;font-size:9pt';
     const tdC = `${tdStyle};text-align:center`;
@@ -210,14 +216,14 @@ export default function ProgrammationReportPage() {
         <span>Nous disons :&nbsp;&nbsp;</span>${montantEnLettres}
       </div>
       <div style="page-break-inside:avoid;font-family:'Courier New',monospace;font-size:10pt">
-        <p style="text-align:center;margin-top:16px">Fait à Kinshasa, le ${dateProgrammation}</p>
+        <p style="text-align:right;margin-top:16px">Fait à Kinshasa, le ${dateProgrammation}</p>
         <table style="width:100%;border:none;margin-top:20px;font-family:'Courier New',monospace;font-size:10pt">
           <tr>
-            <td style="border:none;width:50%;text-align:left;vertical-align:top;font-weight:bold;font-size:8pt">
-              LE SOUS-DIRECTEUR CHARGE DE<br/>L'ADMINISTRATION ET DES FINANCES<br/><br/><br/><br/><span style="font-size:10pt">${daf}</span>
+            <td style="border:none;width:50%;text-align:left;vertical-align:top;font-weight:bold;font-size:10pt">
+              LE SOUS-DIRECTEUR CHARGE DE<br/>L'ADMINISTRATION ET DES FINANCES<br/><br/><br/><br/>${daf}
             </td>
-            <td style="border:none;width:50%;text-align:left;vertical-align:top;font-weight:bold;font-size:8pt">
-              LE DIRECTEUR PROVINCIAL<br/><br/><br/><br/><br/><span style="font-size:10pt">${dp}</span>
+            <td style="border:none;width:50%;text-align:left;vertical-align:top;font-weight:bold;font-size:10pt">
+              LE DIRECTEUR PROVINCIAL<br/><br/><br/><br/><br/>${dp}
             </td>
           </tr>
         </table>
@@ -251,7 +257,13 @@ export default function ProgrammationReportPage() {
 
   const handlePDFExport = () => {
     const moisLabel = MOIS_NOMS[exportMois - 1];
-    const montantEnLettres = `${numberToFrenchWords(Math.floor(total))} Francs Congolais`;
+    const absTotal = Math.abs(total);
+    const partieEntiere = Math.floor(absTotal);
+    const centimes = Math.round((absTotal - partieEntiere) * 100);
+    let montantEnLettres = `Francs Congolais:  ${numberToFrenchWords(partieEntiere)}`;
+    if (centimes > 0) {
+      montantEnLettres += ` et ${numberToFrenchWords(centimes)} centime`;
+    }
     exportProgrammationPDF({
       rows: filteredRows.map(r => ({ libelle: r.libelle || '', montant: Number(r.montant || 0) })),
       moisLabel,

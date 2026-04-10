@@ -826,7 +826,7 @@ export default function FeuilleCaisseReportPage() {
                       </TableCell>
                       <TableCell className="font-mono text-sm whitespace-nowrap">{row.numeroBEO}</TableCell>
                       <TableCell className="truncate max-w-[280px]">{row.libelle}</TableCell>
-                      <TableCell className={`text-right font-medium ${row.recette > 0 ? 'text-success' : 'text-destructive'}`}>
+                      <TableCell className={`text-right font-medium whitespace-nowrap ${row.recette > 0 ? 'text-success' : 'text-destructive'}`}>
                         {formatMontant(row.recette > 0 ? row.recette : row.depense)}
                       </TableCell>
                     </TableRow>
@@ -890,7 +890,7 @@ export default function FeuilleCaisseReportPage() {
                   <TableCell className="text-center font-medium whitespace-nowrap">REC-{row.numeroOrdre}</TableCell>
                   <TableCell className="font-mono text-sm whitespace-nowrap">{row.numeroBEO}</TableCell>
                   <TableCell className="truncate max-w-[280px]">{row.libelle}</TableCell>
-                  <TableCell className="text-right text-success font-medium">
+                  <TableCell className="text-right text-success font-medium whitespace-nowrap">
                     {formatMontant(row.recette)}
                   </TableCell>
                 </TableRow>
@@ -899,7 +899,7 @@ export default function FeuilleCaisseReportPage() {
             <TableFooter>
               <TableRow className="bg-success/10 font-bold">
                 <TableCell colSpan={4}>TOTAL DES RECETTES</TableCell>
-                <TableCell className="text-right text-success">
+                <TableCell className="text-right text-success whitespace-nowrap">
                   {formatMontant(filteredTotals.totalRecettes)}
                 </TableCell>
               </TableRow>
@@ -929,7 +929,7 @@ export default function FeuilleCaisseReportPage() {
                   <TableCell className="text-center font-medium whitespace-nowrap">DEP-{row.numeroOrdre}</TableCell>
                   <TableCell className="font-mono text-sm whitespace-nowrap">{row.numeroBEO}</TableCell>
                   <TableCell className="truncate max-w-[280px]">{row.libelle}</TableCell>
-                  <TableCell className="text-right text-destructive font-medium">
+                  <TableCell className="text-right text-destructive font-medium whitespace-nowrap">
                     {formatMontant(row.depense)}
                   </TableCell>
                 </TableRow>
@@ -938,7 +938,7 @@ export default function FeuilleCaisseReportPage() {
             <TableFooter>
               <TableRow className="bg-destructive/10 font-bold">
                 <TableCell colSpan={4}>TOTAL DES DÉPENSES</TableCell>
-                <TableCell className="text-right text-destructive">
+                <TableCell className="text-right text-destructive whitespace-nowrap">
                   {formatMontant(filteredTotals.totalDepenses)}
                 </TableCell>
               </TableRow>
@@ -1171,25 +1171,25 @@ export default function FeuilleCaisseReportPage() {
         <Card className="border-l-4 border-l-muted-foreground">
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">Solde Précédent</p>
-            <p className="text-xl font-bold">{formatMontant(soldePrecedent, { showCurrency: true })}</p>
+            <p className="text-xl font-bold whitespace-nowrap">{formatMontant(soldePrecedent, { showCurrency: true })}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-success">
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">Total Recettes</p>
-            <p className="text-xl font-bold text-success">{formatMontant(etatResultat.totalRecettes, { showCurrency: true })}</p>
+            <p className="text-xl font-bold text-success whitespace-nowrap">{formatMontant(etatResultat.totalRecettes, { showCurrency: true })}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-destructive">
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">Total Dépenses</p>
-            <p className="text-xl font-bold text-destructive">{formatMontant(etatResultat.totalDepenses, { showCurrency: true })}</p>
+            <p className="text-xl font-bold text-destructive whitespace-nowrap">{formatMontant(etatResultat.totalDepenses, { showCurrency: true })}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-primary">
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">Encaisse</p>
-            <p className={`text-xl font-bold ${etatResultat.encaisse >= 0 ? 'text-success' : 'text-destructive'}`}>
+            <p className={`text-xl font-bold whitespace-nowrap ${etatResultat.encaisse >= 0 ? 'text-success' : 'text-destructive'}`}>
               {formatMontant(etatResultat.encaisse, { showCurrency: true })}
             </p>
           </CardContent>
@@ -1197,7 +1197,7 @@ export default function FeuilleCaisseReportPage() {
         <Card className="border-l-4 border-l-info">
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">Balance</p>
-            <p className={`text-xl font-bold ${etatResultat.balance >= 0 ? 'text-info' : 'text-destructive'}`}>
+            <p className={`text-xl font-bold whitespace-nowrap ${etatResultat.balance >= 0 ? 'text-info' : 'text-destructive'}`}>
               {formatMontant(etatResultat.balance, { showCurrency: true })}
             </p>
           </CardContent>

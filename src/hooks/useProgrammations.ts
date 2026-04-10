@@ -3,28 +3,20 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useMemo, useCallback } from 'react';
 import { saveToCache, getFromCache } from './useLocalStorageCache';
-import { useLocalAuth } from '@/contexts/LocalAuthContext';
 
 export interface Programmation {
-  id: string;
-  numero_ordre: number | null;
-  mois: number;
-  annee: number;
-  rubrique_id: string | null;
-  designation: string;
-  montant_prevu: number;
-  montant_lettre: string | null;
-  is_validated: boolean;
-  validated_by: string | null;
-  validated_at: string | null;
-  user_id: string;
+  id: number;
+  numero: number | null;
+  libelle: string | null;
+  montant: number | null;
+  mois: string | null;
+  annee: string | null;
+  code: string | null;
+  comptable: string | null;
+  daf: string | null;
+  dp: string | null;
+  date_programmation: string | null;
   created_at: string;
-  updated_at: string;
-  rubrique?: {
-    id: string;
-    code: string;
-    libelle: string;
-  } | null;
 }
 
 const moisNoms = [
@@ -32,53 +24,75 @@ const moisNoms = [
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
 ];
 
-export function useProgrammations() {
+const MOIS_DB: Record<number, string> = {
+  1: 'JANVIER', 2: 'FEVRIER', 3: 'MARS', 4: 'AVRIL',
+  5: 'MAI', 6: 'JUIN', 7: 'JUILLET', 8: 'AOUT',
+  9: 'SEPTEMBRE', 10: 'OCTOBRE', 11: 'NOVEMBRE', 12: 'DECEMBRE',
+};
+
+const MOIS_REVERSE: Record<string, number> = Object.fromEntries(
+  Object.entries(MOIS_DB).map(([k, v]) => [v, Number(k)])
+);
+
+export function useProgrammations(selectedMois?: number, selectedAnnee?: number) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user } = useLocalAuth();
+
+  const moisStr = selectedMois ? MOIS_DB[selectedMois] : undefined;
+  const anneeStr = selectedAnnee ? String(selectedAnnee) : undefined;
 
   const { data: programmations = [], isLoading, error } = useQuery({
-    queryKey: ['programmations'],
+    queryKey: ['programmations', moisStr, anneeStr],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('programmations')
-        .select(`
-          *,
-          rubrique:rubriques(id, code, libelle)
-        `)
-        .order('annee', { ascending: false })
-        .order('mois', { ascending: false })
-        .order('numero_ordre', { ascending: true });
+      let query = supabase
+        .from('programmation_depenses' as any)
+        .select('*');
 
+      if (moisStr) query = query.eq('mois', moisStr);
+      if (anneeStr) query = query.eq('annee', anneeStr);
+
+      query = query.order('numero', { ascending: true });
+
+      const { data, error } = await query;
       if (error) throw error;
-      const typedData = data as Programmation[];
+      const typedData = (data || []) as unknown as Programmation[];
       
-      // Save to cache
-      saveToCache('programmations', typedData);
+      saveToCache(`programmations_${moisStr}_${anneeStr}`, typedData);
       return typedData;
     },
     staleTime: 30000,
-    placeholderData: () => getFromCache<Programmation[]>('programmations', 60 * 60 * 1000) ?? undefined,
+    placeholderData: () => getFromCache<Programmation[]>(`programmations_${moisStr}_${anneeStr}`, 60 * 60 * 1000) ?? undefined,
   });
 
   const createProgrammation = useMutation({
     mutationFn: async (programmation: {
       mois: number;
       annee: number;
-      designation: string;
-      montant_prevu: number;
-      montant_lettre?: string;
-      rubrique_id?: string;
+      libelle: string;
+      montant: number;
     }) => {
-      if (!user?.id) {
-        throw new Error('Session invalide ou expirée');
-      }
+      const moisInsert = MOIS_DB[programmation.mois];
+      const anneeInsert = String(programmation.annee);
+
+      // Determine next numero for this month/year from server
+      const { data: maxRow } = await supabase
+        .from('programmation_depenses' as any)
+        .select('numero')
+        .eq('mois', moisInsert)
+        .eq('annee', anneeInsert)
+        .order('numero', { ascending: false })
+        .limit(1)
+        .single();
+      const maxNumero = (maxRow as any)?.numero || 0;
 
       const { data, error } = await supabase
-        .from('programmations')
+        .from('programmation_depenses' as any)
         .insert({
-          ...programmation,
-          user_id: user.id,
+          libelle: programmation.libelle,
+          montant: programmation.montant,
+          mois: moisInsert,
+          annee: anneeInsert,
+          numero: maxNumero + 1,
         })
         .select()
         .single();
@@ -88,6 +102,8 @@ export function useProgrammations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['programmations'] });
+      queryClient.invalidateQueries({ queryKey: ['programmation-depenses'] });
+      queryClient.invalidateQueries({ queryKey: ['programmations-report'] });
       toast({ title: 'Succès', description: 'Programmation créée avec succès' });
     },
     onError: (error: Error) => {
@@ -96,9 +112,9 @@ export function useProgrammations() {
   });
 
   const updateProgrammation = useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<Programmation> & { id: string }) => {
+    mutationFn: async ({ id, ...updates }: { id: number; libelle?: string; montant?: number }) => {
       const { data, error } = await supabase
-        .from('programmations')
+        .from('programmation_depenses' as any)
         .update(updates)
         .eq('id', id)
         .select()
@@ -109,6 +125,8 @@ export function useProgrammations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['programmations'] });
+      queryClient.invalidateQueries({ queryKey: ['programmation-depenses'] });
+      queryClient.invalidateQueries({ queryKey: ['programmations-report'] });
       toast({ title: 'Succès', description: 'Programmation mise à jour' });
     },
     onError: (error: Error) => {
@@ -117,9 +135,9 @@ export function useProgrammations() {
   });
 
   const deleteProgrammation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (id: number) => {
       const { error } = await supabase
-        .from('programmations')
+        .from('programmation_depenses' as any)
         .delete()
         .eq('id', id);
 
@@ -127,6 +145,8 @@ export function useProgrammations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['programmations'] });
+      queryClient.invalidateQueries({ queryKey: ['programmation-depenses'] });
+      queryClient.invalidateQueries({ queryKey: ['programmations-report'] });
       toast({ title: 'Succès', description: 'Programmation supprimée' });
     },
     onError: (error: Error) => {
@@ -138,26 +158,9 @@ export function useProgrammations() {
     `${moisNoms[mois - 1]} ${annee}`, []);
 
   const totalProgramme = useMemo(() => 
-    (programmations || []).reduce((acc, p) => acc + Number(p.montant_prevu), 0), 
+    (programmations || []).reduce((acc, p) => acc + Number(p.montant || 0), 0), 
     [programmations]
   );
-
-  // Get programmations filtered by month and year
-  const getProgrammationsByMonthYear = useCallback((mois: number, annee: number) => {
-    return (programmations || [])
-      .filter(p => p.mois === mois && p.annee === annee)
-      .sort((a, b) => (a.numero_ordre || 0) - (b.numero_ordre || 0));
-  }, [programmations]);
-
-  // Fetch user profile separately for export
-  const fetchUserProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('user_id', userId)
-      .single();
-    return data?.full_name || null;
-  }, []);
 
   return {
     programmations,
@@ -166,10 +169,9 @@ export function useProgrammations() {
     totalProgramme,
     formatMois,
     moisNoms,
+    MOIS_DB,
     createProgrammation,
     updateProgrammation,
     deleteProgrammation,
-    getProgrammationsByMonthYear,
-    fetchUserProfile,
   };
 }

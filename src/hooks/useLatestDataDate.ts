@@ -28,7 +28,7 @@ export function useLatestDataDate() {
       dates.sort();
       return dates[dates.length - 1]; // La plus récente
     },
-    staleTime: Infinity,
+    staleTime: 5 * 60 * 1000,
   });
 
   if (!data) return { latestYear: new Date().getFullYear(), latestMonth: new Date().getMonth() + 1 };

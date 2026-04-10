@@ -68,6 +68,8 @@ export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
         return (data || []).map(r => ({ ...r, date: r.date_transaction }));
       }
     },
+    staleTime: 0,
+    gcTime: 60 * 1000,
   });
 
   // Fetch total count
@@ -125,6 +127,9 @@ export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       queryClient.invalidateQueries({ queryKey: ['recettes'] });
       queryClient.invalidateQueries({ queryKey: ['recettes-count'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['solde-precedent-sommaire'] });
+      queryClient.invalidateQueries({ queryKey: ['latest-data-date'] });
       toast({ title: 'Succès', description: 'Recette enregistrée avec succès' });
     },
     onError: (error: Error) => {
@@ -148,6 +153,8 @@ export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       clearCache('recettes-page1');
       queryClient.invalidateQueries({ queryKey: ['recettes'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['solde-precedent-sommaire'] });
       toast({ title: 'Succès', description: 'Recette mise à jour' });
     },
     onError: (error: Error) => {
@@ -169,6 +176,9 @@ export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       queryClient.invalidateQueries({ queryKey: ['recettes'] });
       queryClient.invalidateQueries({ queryKey: ['recettes-count'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['solde-precedent-sommaire'] });
+      queryClient.invalidateQueries({ queryKey: ['latest-data-date'] });
       toast({ title: 'Succès', description: 'Recette supprimée' });
     },
     onError: (error: Error) => {

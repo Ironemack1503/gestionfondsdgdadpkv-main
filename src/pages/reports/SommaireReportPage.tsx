@@ -168,9 +168,14 @@ export default function SommaireReportPage() {
         recetteMap.set(key, { type: 'recette', imp, designation, recette: Number(r.montant), depense: 0 });
       }
     }
-    const recetteRows = [...recetteMap.values()].sort((a, b) =>
-      a.imp !== b.imp ? a.imp.localeCompare(b.imp) : a.designation.localeCompare(b.designation)
-    );
+    const recetteRows = [...recetteMap.values()].sort((a, b) => {
+      // "Solde du" toujours en première position
+      const aIsSolde = a.designation.toLowerCase().startsWith('solde du');
+      const bIsSolde = b.designation.toLowerCase().startsWith('solde du');
+      if (aIsSolde && !bIsSolde) return -1;
+      if (!aIsSolde && bIsSolde) return 1;
+      return a.imp !== b.imp ? a.imp.localeCompare(b.imp) : a.designation.localeCompare(b.designation);
+    });
     rows.push(...recetteRows);
 
     // ── DEPENSES : codes IMP fixes ──────────────────────────────────────────
@@ -241,28 +246,19 @@ export default function SommaireReportPage() {
     () => sommaireRows.filter(r => r.type === 'depense').reduce((s, r) => s + r.depense, 0),
     [sommaireRows]
   );
-  const totalRecettes = soldePrecedent + totalRecettesLignes;
+  // TOTAL = somme des lignes visibles (pas de soldePrecedent ajouté)
+  const totalRecettes = totalRecettesLignes;
   const encaisse = totalRecettes - totalDepenses;
-  const balance = totalDepenses + encaisse; // = totalRecettes
 
   // ── HTML EXPORT ────────────────────────────────────────────────────────────
 
   const buildSommaireHTML = (forPrint = true): string => {
     const moisLabel = MOIS_NOMS[exportMois - 1];
     const comptable = nomComptable.trim() || '____________________';
-    const encaisseEnLettres = `${numberToFrenchWords(Math.floor(Math.abs(encaisse)))} Francs Congolais`;
 
     const tdStyle = 'border:1px solid #000;padding:2px 5px;font-weight:bold;font-size:9pt';
     const tdC = `${tdStyle};text-align:center`;
     const tdR = `${tdStyle};text-align:right`;
-
-    const soldePrecedentRow = `
-      <tr>
-        <td style="${tdC}">707820</td>
-        <td style="${tdStyle}">Solde du mois antérieur</td>
-        <td style="${tdR}">${formatMontant(soldePrecedent)}</td>
-        <td style="${tdR}"></td>
-      </tr>`;
 
     const recetteRowsHTML = sommaireRows
       .filter(r => r.type === 'recette')
@@ -317,7 +313,6 @@ export default function SommaireReportPage() {
           </tr>
         </thead>
         <tbody>
-          ${soldePrecedentRow}
           ${recetteRowsHTML}
           ${depenseRowsHTML}
         </tbody>
@@ -329,17 +324,19 @@ export default function SommaireReportPage() {
           </tr>
           <tr style="font-weight:bold">
             <td colspan="2" style="border:1px solid #000;padding:2px 5px;text-align:right">ENCAISSE :</td>
-            <td colspan="2" style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(encaisse)}</td>
+            <td style="border:1px solid #000;padding:2px 5px;text-align:right"></td>
+            <td style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(encaisse)}</td>
           </tr>
           <tr style="font-weight:bold">
             <td colspan="2" style="border:1px solid #000;padding:2px 5px;text-align:right">BALANCE :</td>
-            <td style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(balance)}</td>
-            <td style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(balance)}</td>
+            <td style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(totalRecettes)}</td>
+            <td style="border:1px solid #000;padding:2px 5px;text-align:right">${formatMontant(totalDepenses + encaisse)}</td>
           </tr>
         </tfoot>
       </table>
       <div style="margin-top:10px;font-weight:bold;font-family:'Courier New',monospace;font-size:10pt;word-wrap:break-word">
-        <span>Nous disons :&nbsp;&nbsp;</span>${encaisseEnLettres}
+        <span>Nous disons :&nbsp;&nbsp;Francs Congolais:&nbsp;&nbsp;${numberToFrenchWords(Math.floor(Math.abs(encaisse)))}</span>
+        ${(() => { const c = Math.round((Math.abs(encaisse) - Math.floor(Math.abs(encaisse))) * 100); return c > 0 ? ` et ${numberToFrenchWords(c)} centime` : ''; })()}
       </div>
       <div style="page-break-inside:avoid;font-family:'Courier New',monospace;font-size:10pt">
         <p style="text-align:right;margin-top:16px">Fait à Kinshasa, le ${dateFeuille}</p>
@@ -373,7 +370,13 @@ export default function SommaireReportPage() {
 
   const handlePDFExport = () => {
     const moisLabel = MOIS_NOMS[exportMois - 1];
-    const encaisseEnLettres = `${numberToFrenchWords(Math.floor(Math.abs(encaisse)))} Francs Congolais`;
+    const absEncaisse = Math.abs(encaisse);
+    const partieEntiere = Math.floor(absEncaisse);
+    const centimes = Math.round((absEncaisse - partieEntiere) * 100);
+    let encaisseEnLettres = `Francs Congolais:  ${numberToFrenchWords(partieEntiere)}`;
+    if (centimes > 0) {
+      encaisseEnLettres += ` et ${numberToFrenchWords(centimes)} centime`;
+    }
     exportSommairePDF({
       rows: sommaireRows,
       soldePrecedent,
@@ -473,16 +476,7 @@ export default function SommaireReportPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* Solde antérieur */}
-                <TableRow className="bg-muted/30">
-                  <TableCell className="font-bold text-center border-r">707820</TableCell>
-                  <TableCell className="font-bold border-r">Solde du mois antérieur</TableCell>
-                  <TableCell className="font-bold text-right border-r text-green-700">
-                    {formatMontant(soldePrecedent)}
-                  </TableCell>
-                  <TableCell className="font-bold text-right" />
-                </TableRow>
-                {/* Recettes */}
+                  {/* Recettes (sans ligne "Solde du mois antérieur" — le sommaire est une synthèse) */}
                 {recetteRows.map((row, i) => (
                   <TableRow key={`r-${i}`}>
                     <TableCell className="font-bold text-center border-r">{row.imp}</TableCell>
@@ -513,12 +507,13 @@ export default function SommaireReportPage() {
                 </TableRow>
                 <TableRow>
                   <TableCell colSpan={2} className="text-right font-bold border-r">ENCAISSE :</TableCell>
-                  <TableCell colSpan={2} className="text-right font-bold">{formatMontant(encaisse)}</TableCell>
+                  <TableCell className="text-right font-bold border-r"></TableCell>
+                  <TableCell className="text-right font-bold">{formatMontant(encaisse)}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell colSpan={2} className="text-right font-bold border-r">BALANCE :</TableCell>
-                  <TableCell className="text-right font-bold border-r">{formatMontant(balance)}</TableCell>
-                  <TableCell className="text-right font-bold">{formatMontant(balance)}</TableCell>
+                  <TableCell className="text-right font-bold border-r">{formatMontant(totalRecettes)}</TableCell>
+                  <TableCell className="text-right font-bold">{formatMontant(totalDepenses + encaisse)}</TableCell>
                 </TableRow>
               </TableFooter>
             </Table>

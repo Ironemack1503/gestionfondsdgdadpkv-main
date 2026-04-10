@@ -220,7 +220,7 @@ const addPDFFooter = (doc: jsPDF, pageNumber: number, totalPages: number, settin
       doc.text(DEFAULT_FOOTER_SLOGAN, pageWidth / 2, footerStartY + 2, { align: 'center' });
       doc.setFontSize(6.5);
       doc.setFont('times', 'normal');
-      doc.setTextColor(80, 80, 80);
+      doc.setTextColor(0, 0, 0);
       doc.text(DEFAULT_FOOTER_LINE1, pageWidth / 2, footerStartY + 6, { align: 'center' });
       doc.text(DEFAULT_FOOTER_LINE2, pageWidth / 2, footerStartY + 9.5, { align: 'center' });
       doc.text(DEFAULT_FOOTER_LINE3, pageWidth / 2, footerStartY + 13, { align: 'center' });
@@ -229,15 +229,15 @@ const addPDFFooter = (doc: jsPDF, pageNumber: number, totalPages: number, settin
   
   // "Imprimé le" à gauche et "Page N / M" à droite — sous l'image
   const bottomY = pageHeight - 4;
-  doc.setFontSize(8);
-  doc.setFont('times', 'normal');
+  doc.setFontSize(10);
+  doc.setFont('times', 'bold');
   doc.setTextColor(0, 0, 0);
   
   if (settings.showGenerationDate) {
     const now = new Date();
     const dateStr = now.toLocaleDateString('fr-FR');
     const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    doc.text(`Imprimé le : ${dateStr} ; ${timeStr}`, 5, bottomY);
+    doc.text(`Imprimé le : ${dateStr} ; ${timeStr}`, 3, bottomY);
   }
   
   doc.text(`Page ${pageNumber} / ${totalPages}`, pageWidth - 5, bottomY, { align: 'right' });
@@ -254,13 +254,13 @@ const hexToRgb = (hex: string): [number, number, number] => {
 // Add DGDA header with logo - Format officiel Crystal Reports (image PNG officielle)
 const addPDFHeader = async (doc: jsPDF, settings: PDFExportSettings): Promise<number> => {
   const pageWidth = doc.internal.pageSize.width;
-  let yPos = 8;
+  let yPos = 4;
 
-  // 1. Image en-tête officielle : pleine largeur
+  // 1. Image en-tête officielle : pleine largeur, agrandie +4mm chaque côté
   try {
-    // Image source ~940x70px → hauteur ~18mm
-    const imgH = 18;
-    doc.addImage(logoEntete, 'PNG', 5, yPos, pageWidth - 10, imgH);
+    // Image source ~940x70px → hauteur ~26mm (18+4+4)
+    const imgH = 26;
+    doc.addImage(logoEntete, 'PNG', 1, yPos, pageWidth - 2, imgH);
     yPos += imgH + 4;
   } catch {
     // Fallback textuel si l'image échoue
@@ -344,7 +344,7 @@ export const exportToPDF = async ({ title, filename, columns, data, subtitle, pd
     currentY += 6;
     doc.setFontSize(9);
     doc.setFont('times', 'italic');
-    doc.setTextColor(100, 100, 100);
+    doc.setTextColor(0, 0, 0);
     doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, pageWidth / 2, currentY, { align: 'center' });
     doc.setTextColor(0, 0, 0);
   }
@@ -490,6 +490,12 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
     rowIdx++;
   });
 
+  // Supprimer la dernière ligne vide (juste avant TOTAL)
+  if (bodyRows.length > 0) {
+    bodyRows.pop();
+    rowIdx--;
+  }
+
   // 4. Totaux
   const totalR = data.reduce((s, i) => s + (i.recette || 0), 0);
   const totalD = data.reduce((s, i) => s + (i.depense || 0), 0);
@@ -528,8 +534,8 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
     head: [
       [
         { content: 'Date', styles: { halign: 'center' } },
-        { content: 'N°ORD', styles: { halign: 'center', fontSize: 7 } },
-        { content: 'N°BEO', styles: { halign: 'center', fontSize: 7 } },
+        { content: 'N°ORD', styles: { halign: 'center' } },
+        { content: 'N°BEO', styles: { halign: 'center' } },
         { content: 'LIBELLE', styles: { halign: 'center' } },
         { content: 'MONTANT', colSpan: 3, styles: { halign: 'center' } },
       ],
@@ -544,9 +550,10 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
     showHead: 'firstPage',
     startY: headerEndY + 8,
     styles: {
-      fontSize: 8,
+      fontSize: 9,
       font: 'courier',
-      cellPadding: 1,
+      fontStyle: 'bold',
+      cellPadding: 0.8,
       lineColor: [0, 0, 0],
       lineWidth: 0.2,
       textColor: [0, 0, 0],
@@ -558,7 +565,7 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
       textColor: [0, 0, 0],
       fontStyle: 'bold',
       halign: 'center',
-      fontSize: 8,
+      fontSize: 9,
     },
     bodyStyles: {
       fillColor: [255, 255, 255],
@@ -567,13 +574,13 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 16, halign: 'center' },   // Date
-      1: { cellWidth: 11, halign: 'center' },   // N°ORD
-      2: { cellWidth: 11, halign: 'center' },   // N°BEO
+      0: { cellWidth: 19, halign: 'center' },   // Date
+      1: { cellWidth: 13, halign: 'center' },   // N°ORD
+      2: { cellWidth: 13, halign: 'center' },   // N°BEO
       3: { cellWidth: 'auto' },                  // LIBELLE
-      4: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },  // RECETTE
-      5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },  // DEPENSE
-      6: { cellWidth: 14, halign: 'center' },   // IMP
+      4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },  // RECETTE
+      5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },  // DEPENSE
+      6: { cellWidth: 15, halign: 'center' },   // IMP
     },
     didParseCell: function(hookData) {
       const r = hookData.row.index;
@@ -583,7 +590,7 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
         if (st.fontStyle) hookData.cell.styles.fontStyle = st.fontStyle as any;
       }
     },
-    margin: { top: 14, right: 5, bottom: 40, left: 5 },
+    margin: { top: 14, right: 0, bottom: 40, left: 0 },
   });
 
   // 6. Après le tableau : "Nous disons", date, signature
@@ -614,8 +621,9 @@ export const exportFeuilleCaissePDF = async (options: FeuilleCaissePDFOptions): 
   }
   y += 8;
 
-  doc.setFont('courier', 'normal');
+  doc.setFont('courier', 'bold');
   doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
   doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth - 5, y, { align: 'right' });
   y += 12;
 
@@ -675,8 +683,8 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
   doc.setFontSize(12);
   doc.setFont('courier', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text(`SOMMAIRE DU MOIS DE`, pageWidth - 5, headerEndY - 3, { align: 'right' });
-  doc.text(`${moisLabel.toUpperCase()} ${annee}`, pageWidth - 5, headerEndY + 4, { align: 'right' });
+  doc.text(`SOMMAIRE DU MOIS DE`, pageWidth / 2, headerEndY - 3, { align: 'center' });
+  doc.text(`${moisLabel.toUpperCase()} ${annee}`, pageWidth / 2, headerEndY + 4, { align: 'center' });
 
   // Direction Provinciale — à gauche, italique cursive
   doc.setFontSize(11);
@@ -694,15 +702,7 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
   // 3. Construire le body du tableau
   const bodyRows: any[][] = [];
 
-  // Solde antérieur
-  bodyRows.push([
-    { content: '707820', styles: { halign: 'center', fontStyle: 'bold' } },
-    { content: 'Solde du mois antérieur', styles: { fontStyle: 'bold' } },
-    { content: fmtNum(soldePrecedent), styles: { halign: 'right', fontStyle: 'bold' } },
-    { content: '', styles: { halign: 'right' } },
-  ]);
-
-  // Recettes
+  // Recettes (sans la ligne "Solde du mois antérieur" — le sommaire est une synthèse)
   for (const row of rows.filter(r => r.type === 'recette')) {
     bodyRows.push([
       { content: row.imp, styles: { halign: 'center', fontStyle: 'bold' } },
@@ -722,10 +722,9 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
     ]);
   }
 
-  // Calculs des totaux
-  const totalRecettesLignes = rows.filter(r => r.type === 'recette').reduce((s, r) => s + r.recette, 0);
+  // Calculs des totaux (somme des lignes visibles uniquement)
+  const totalRecettes = rows.filter(r => r.type === 'recette').reduce((s, r) => s + r.recette, 0);
   const totalDepenses = rows.filter(r => r.type === 'depense').reduce((s, r) => s + r.depense, 0);
-  const totalRecettes = soldePrecedent + totalRecettesLignes;
   const encaisse = totalRecettes - totalDepenses;
 
   // TOTAL
@@ -734,16 +733,18 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
     { content: fmtNum(totalRecettes), styles: { halign: 'right', fontStyle: 'bold' } },
     { content: fmtNum(totalDepenses), styles: { halign: 'right', fontStyle: 'bold' } },
   ]);
-  // ENCAISSE
+  // ENCAISSE (deux colonnes : Recettes=vide, Dépenses=encaisse — comme Feuille de Caisse)
   bodyRows.push([
     { content: 'ENCAISSE :', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
-    { content: fmtNum(encaisse), colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: '', styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(encaisse), styles: { halign: 'right', fontStyle: 'bold' } },
   ]);
-  // BALANCE
+  // BALANCE (deux colonnes : Recettes=totalRecettes, Dépenses=totalDepenses+encaisse)
+  const balanceDepenses = totalDepenses + encaisse;
   bodyRows.push([
     { content: 'BALANCE :', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
     { content: fmtNum(totalRecettes), styles: { halign: 'right', fontStyle: 'bold' } },
-    { content: fmtNum(totalRecettes), styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtNum(balanceDepenses), styles: { halign: 'right', fontStyle: 'bold' } },
   ]);
 
   // 4. Tableau
@@ -757,15 +758,17 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
       [
         { content: '', colSpan: 2 },
         { content: 'RECETTES', styles: { halign: 'center' } },
+        { content: 'DEPENSES', styles: { halign: 'center' } },
       ],
     ],
     body: bodyRows,
     showHead: 'firstPage',
     startY: headerEndY + 21,
     styles: {
-      fontSize: 8,
+      fontSize: 9,
       font: 'courier',
-      cellPadding: 1.5,
+      fontStyle: 'bold',
+      cellPadding: 0.8,
       lineColor: [0, 0, 0],
       lineWidth: 0.2,
       textColor: [0, 0, 0],
@@ -777,7 +780,7 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
       textColor: [0, 0, 0],
       fontStyle: 'bold',
       halign: 'center',
-      fontSize: 8,
+      fontSize: 9,
     },
     bodyStyles: {
       fillColor: [255, 255, 255],
@@ -786,12 +789,12 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 16, halign: 'center' },
-      1: { cellWidth: 108, overflow: 'ellipsize' },
-      2: { cellWidth: 38, halign: 'right' },
-      3: { cellWidth: 38, halign: 'right' },
+      0: { cellWidth: 14, halign: 'center' },
+      1: { cellWidth: 'auto', overflow: 'ellipsize' },
+      2: { cellWidth: 36, halign: 'right' },
+      3: { cellWidth: 36, halign: 'right' },
     },
-    margin: { top: 14, right: 5, bottom: 30, left: 5 },
+    margin: { top: 14, right: 3, bottom: 30, left: 3 },
   });
 
   // 5. Bloc signature
@@ -817,16 +820,17 @@ export const exportSommairePDF = async (options: SommairePDFOptions): Promise<vo
   }
   y += 8;
 
-  doc.setFont('courier', 'normal');
+  doc.setFont('courier', 'bold');
   doc.setFontSize(10);
-  doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth / 2, y, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Fait à Kinshasa, le ${dateFeuille}`, pageWidth - 5, y, { align: 'right' });
   y += 12;
 
   doc.setFont('courier', 'bold');
-  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth / 2, y, { align: 'center' });
+  doc.text('COMPTABLE PROVINCIALE DES DEPENSES', pageWidth - 5, y, { align: 'right' });
   y += 10;
 
-  doc.text(nomComptable || '____________________', pageWidth / 2, y, { align: 'center' });
+  doc.text(nomComptable || '____________________', pageWidth - 17, y, { align: 'right' });
 
   // 6. Footer sur toutes les pages
   const pageCount2 = doc.getNumberOfPages();
@@ -868,13 +872,12 @@ export const exportProgrammationPDF = async (options: ProgrammationPDFOptions): 
   // 2. Titre centré
   doc.setFontSize(11);
   doc.setFont('courier', 'bold');
-  // 2. Titre aligné à droite + Direction à gauche (format Crystal Reports)
+  // 2. Titre centré sur 2 lignes
   doc.setFontSize(12);
   doc.setFont('courier', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text('PROGRAMATION DES', pageWidth - 5, headerEndY - 3, { align: 'right' });
-  doc.text(`DEPENSES MOIS DE`, pageWidth - 5, headerEndY + 4, { align: 'right' });
-  doc.text(`${moisLabel.toUpperCase()} ${annee}`, pageWidth - 5, headerEndY + 11, { align: 'right' });
+  doc.text('PROGRAMATION DES DEPENSES', pageWidth / 2, headerEndY - 3, { align: 'center' });
+  doc.text(`MOIS DE ${moisLabel.toUpperCase()} ${annee}`, pageWidth / 2, headerEndY + 4, { align: 'center' });
 
   // Direction Provinciale — à gauche, italique cursive
   doc.setFontSize(11);
@@ -899,7 +902,7 @@ export const exportProgrammationPDF = async (options: ProgrammationPDFOptions): 
   // Total
   const total = rows.reduce((s, r) => s + r.montant, 0);
   bodyRows.push([
-    { content: 'MONTANTS TOTAL', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: 'MONTANTS TOTAL', colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } },
     { content: fmtNum(total), styles: { halign: 'right', fontStyle: 'bold' } },
   ]);
 
@@ -916,9 +919,10 @@ export const exportProgrammationPDF = async (options: ProgrammationPDFOptions): 
     showHead: 'firstPage',
     startY: headerEndY + 21,
     styles: {
-      fontSize: 8,
+      fontSize: 9,
       font: 'courier',
-      cellPadding: 1.5,
+      fontStyle: 'bold',
+      cellPadding: 0.8,
       lineColor: [0, 0, 0],
       lineWidth: 0.2,
       textColor: [0, 0, 0],
@@ -930,7 +934,7 @@ export const exportProgrammationPDF = async (options: ProgrammationPDFOptions): 
       textColor: [0, 0, 0],
       fontStyle: 'bold',
       halign: 'center',
-      fontSize: 8,
+      fontSize: 9,
     },
     bodyStyles: {
       fillColor: [255, 255, 255],
@@ -941,9 +945,9 @@ export const exportProgrammationPDF = async (options: ProgrammationPDFOptions): 
     columnStyles: {
       0: { cellWidth: 12, halign: 'center' },
       1: { cellWidth: 'auto', overflow: 'ellipsize' },
-      2: { cellWidth: 38, halign: 'right' },
+      2: { cellWidth: 36, halign: 'right' },
     },
-    margin: { top: 14, right: 5, bottom: 30, left: 5 },
+    margin: { top: 14, right: 3, bottom: 30, left: 3 },
   });
 
   // 5. Bloc signature
@@ -951,7 +955,7 @@ export const exportProgrammationPDF = async (options: ProgrammationPDFOptions): 
   const pageHeight = doc.internal.pageSize.height;
   let y = finalY + 6;
 
-  if (y + 60 > pageHeight - 35) {
+  if (y + 50 > pageHeight - 35) {
     doc.addPage();
     y = 20;
   }
@@ -968,36 +972,37 @@ export const exportProgrammationPDF = async (options: ProgrammationPDFOptions): 
     y += 5;
     doc.text(montantLines[li], 5 + labelWidth, y);
   }
-  y += 8;
+  y += 5;
 
-  // Date et lieu
-  doc.setFont('courier', 'normal');
+  // Date et lieu — aligné à droite
+  doc.setFont('courier', 'bold');
   doc.setFontSize(10);
-  doc.text(`Fait à Kinshasa, le ${dateProgrammation}`, pageWidth / 2, y, { align: 'center' });
-  y += 15;
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Fait à Kinshasa, le ${dateProgrammation}`, pageWidth - 5, y, { align: 'right' });
+  y += 12;
 
   // Double signature — deux colonnes centrées
   const leftCenterX = pageWidth / 4;
   const rightCenterX = (pageWidth / 4) * 3;
   const colW = (pageWidth / 2) - 10;
 
-  // Titres des signataires
+  // Titres des signataires (même taille que les noms)
   doc.setFont('courier', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(10);
   const leftTitle = "LE SOUS-DIRECTEUR CHARGE DE\nL'ADMINISTRATION ET DES FINANCES";
   const rightTitle = "LE DIRECTEUR CHARGER PROVINCIAL";
   const leftTitleLines = doc.splitTextToSize(leftTitle, colW);
   const rightTitleLines = doc.splitTextToSize(rightTitle, colW);
   leftTitleLines.forEach((line: string, i: number) => {
-    doc.text(line, leftCenterX, y + i * 4, { align: 'center' });
+    doc.text(line, leftCenterX, y + i * 5, { align: 'center' });
   });
   rightTitleLines.forEach((line: string, i: number) => {
-    doc.text(line, rightCenterX, y + i * 4, { align: 'center' });
+    doc.text(line, rightCenterX, y + i * 5, { align: 'center' });
   });
 
   // Noms des signataires
   const maxTitleLines = Math.max(leftTitleLines.length, rightTitleLines.length);
-  y += maxTitleLines * 4 + 15;
+  y += maxTitleLines * 5 + 8;
   doc.setFontSize(10);
   doc.text(nomDAF || '____________________', leftCenterX, y, { align: 'center' });
   doc.text(nomDP || '____________________', rightCenterX, y, { align: 'center' });

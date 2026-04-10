@@ -123,12 +123,6 @@ const menuItems: MenuItem[] = [
   
   // Section 4: Rapports
   {
-    title: "Tous les Rapports",
-    icon: FileText,
-    path: "/rapports",
-    section: "Rapports",
-  },
-  {
     title: "Feuille de Caisse",
     icon: FileSpreadsheet,
     path: "/rapports/feuille-caisse",
