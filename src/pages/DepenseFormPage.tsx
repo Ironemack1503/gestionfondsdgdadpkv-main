@@ -31,54 +31,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-// Liste des codes IMP disponibles
-const CODE_IMP_OPTIONS = [
-  { libelle: "Aticles alimentaires", code: "604130" },
-  { libelle: "Carburant et lubrifiant", code: "604210" },
-  { libelle: "Produits d'entrettien", code: "604300" },
-  { libelle: "Fournitures de bureau", code: "604710" },
-  { libelle: "Consommables informatiques", code: "604720" },
-  { libelle: "Eau", code: "605100" },
-  { libelle: "Electricité", code: "605200" },
-  { libelle: "Déplacement", code: "618120" },
-  { libelle: "Loyers laucaux et Bureaux de service", code: "622210" },
-  { libelle: "Entretien, réparations et maintenance", code: "624000" },
-  { libelle: "Abonnements", code: "626530" },
-  { libelle: "Frais de communications et télécommunication", code: "628100" },
-  { libelle: "Frais bancaire", code: "631000" },
-  { libelle: "Paiement prime contentieuse", code: "632540" },
-  { libelle: "Frais de médicaux", code: "632831" },
-  { libelle: "Frais de gardiennage et sécurité", code: "632840" },
-  { libelle: "Frais d'impression, reproduction et reluire", code: "632860" },
-  { libelle: "Frais de mission intérieur", code: "638410" },
-  { libelle: "Autres charges", code: "659800" },
-  { libelle: "Prime du comptable", code: "661257" },
-  { libelle: "Collations", code: "663841" },
-  { libelle: "Frais funéraires et assistance deuil", code: "668340" },
-  { libelle: "Prime de surveillance SEP", code: "661272" },
-  { libelle: "Fonctionnement ZES", code: "000000" },
-  { libelle: "Fonctionnement délégation syndicale", code: "000000" },
-  { libelle: "Fonctionnement bureau B/Ngobila", code: "000000" },
-  { libelle: "Fonctionnement sec DP", code: "000000" },
-  { libelle: "Fonctionnement unité genre", code: "000000" },
-  { libelle: "Fonctionnement bureau SEP", code: "000000" },
-  { libelle: "Fonctionnement bureau TCPK", code: "000000" },
-  { libelle: "Fonctionnement bureau Nocafex", code: "000000" },
-  { libelle: "Fonctionnement bureau Lerexcom", code: "000000" },
-  { libelle: "Fonctionnement bureau GU", code: "000000" },
-  { libelle: "Service ext", code: "000000" },
-  { libelle: "Salubrité", code: "000000" },
-  { libelle: "Plomberie", code: "000000" },
-  { libelle: "Manutention", code: "000000" },
-  { libelle: "Prêt accordé", code: "000000" },
-  { libelle: "Achat serrure, pendule", code: "000000" },
-  { libelle: "Prime STDA", code: "000000" },
-  { libelle: "Prime Bralima", code: "000000" },
-  { libelle: "Prime Bracongo", code: "000000" },
-  { libelle: "Motivation aux aviseurs", code: "000000" },
-  { libelle: "Elaboration rapport de paie", code: "000000" },
-];
+import { useRubriques } from "@/hooks/useRubriques";
 
 export default function DepenseFormPage() {
   const navigate = useNavigate();
@@ -86,6 +39,7 @@ export default function DepenseFormPage() {
   const { depenses, isLoading, createDepense, updateDepense, deleteDepense: deleteDepenseMutation } = useDepenses();
   const { isInstructeur, isAdmin, loading: roleLoading } = useLocalUserRole();
   const queryClient = useQueryClient();
+  const { rubriques } = useRubriques();
   
   const [activeTab, setActiveTab] = useState("create");
   const [searchQuery, setSearchQuery] = useState("");
@@ -115,6 +69,7 @@ export default function DepenseFormPage() {
 
   const [libelleMontantLettre, setLibelleMontantLettre] = useState("");
   const [impMode, setImpMode] = useState<"select" | "manual">("select");
+  const [selectedRubriqueCode, setSelectedRubriqueCode] = useState("");
 
   // Générer automatiquement le N° d'ord au chargement du composant
   useEffect(() => {
@@ -172,9 +127,8 @@ export default function DepenseFormPage() {
   // Gérer le changement de mode IMP
   const handleImpModeChange = (mode: "select" | "manual") => {
     setImpMode(mode);
-    if (mode === "manual") {
-      setFormData(prev => ({ ...prev, imp: "" }));
-    }
+    setFormData(prev => ({ ...prev, imp: "" }));
+    setSelectedRubriqueCode("");
   };
 
   // Mettre à jour le montant en lettres
@@ -201,6 +155,7 @@ export default function DepenseFormPage() {
 
     try {
       const dataToSend = {
+        date_transaction: formData.date,
         date: formData.date,
         heure: new Date().toTimeString().split(' ')[0], // Format HH:MM:SS
         numero_beo: formData.numeroBEO || null,
@@ -210,7 +165,7 @@ export default function DepenseFormPage() {
         motif: formData.libelle,  // Copie pour compatibilité
         montant: parseFloat(formData.montant),
         montant_lettre: libelleMontantLettre || null,
-        imp: formData.imp || null,  // Code IMP
+        imp_code: formData.imp || null,  // Code IMP
         observation: null,
       };
       
@@ -232,9 +187,7 @@ export default function DepenseFormPage() {
       });
       setLibelleMontantLettre("");
       setImpMode("select");
-      
-      // Rediriger vers l'onglet liste pour voir la dépense créée
-      setActiveTab('list');
+      setSelectedRubriqueCode("");
     } catch (error) {
       console.error("❌ Erreur lors de l'enregistrement de la dépense:", error);
       alert("Erreur lors de l'enregistrement: " + (error instanceof Error ? error.message : "Erreur inconnue"));
@@ -555,18 +508,22 @@ export default function DepenseFormPage() {
               </div>
               {impMode === "select" ? (
                 <Select
-                  value={formData.imp}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, imp: value }))}
+                  value={selectedRubriqueCode}
+                  onValueChange={(code) => {
+                    setSelectedRubriqueCode(code);
+                    const r = rubriques.find(x => x.code === code);
+                    setFormData(prev => ({ ...prev, imp: r?.imp || "" }));
+                  }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner un code IMP" />
+                    <SelectValue placeholder="Sélectionner une rubrique" />
                   </SelectTrigger>
                   <SelectContent className="max-h-[300px]">
-                    {CODE_IMP_OPTIONS.map((option) => (
-                      <SelectItem key={option.code + option.libelle} value={option.code}>
+                    {rubriques.filter(r => r.is_active).map((r) => (
+                      <SelectItem key={r.id} value={r.code}>
                         <div className="flex flex-col">
-                          <span className="font-medium">{option.code}</span>
-                          <span className="text-xs text-gray-500">{option.libelle}</span>
+                          <span className="font-medium">{r.libelle}</span>
+                          <span className="text-xs text-gray-500">IMP: {r.imp || "—"}</span>
                         </div>
                       </SelectItem>
                     ))}

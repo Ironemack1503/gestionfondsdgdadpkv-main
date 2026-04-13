@@ -251,6 +251,7 @@ export interface DashboardStats {
   nombreRecettes: number;
   nombreDepenses: number;
   transactionsEnAttente: number;
+  recentTransactions?: { id: string; date: string; reference: string; type: 'Recette' | 'Dépense'; motif: string; montant: number }[];
 }
 
 // Filtres de recherche

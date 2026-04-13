@@ -1,0 +1,51 @@
+# ================================================================
+# GestCaisse – Docker Compose Production
+# Usage : depuis le dossier deploy/  →  docker-compose up -d
+# ================================================================
+
+services:
+
+  gestcaisse-web:
+    build:
+      context: ..                    # Racine du projet (pour COPY src/, etc.)
+      dockerfile: deploy/Dockerfile
+      args:
+        VITE_SUPABASE_URL:             ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
+    image: gestcaisse:production
+    container_name: gestcaisse-web
+    restart: unless-stopped
+
+    ports:
+      - "80:80"        # HTTP → redirigé vers HTTPS
+      - "443:443"      # HTTPS principal
+
+    volumes:
+      # Certificats SSL (générés par generate-certs.ps1, jamais dans l'image)
+      - ./nginx/certs:/etc/nginx/certs:ro
+
+    # Permet au conteneur d'atteindre les services sur le PC host
+    # (Supabase tourne sur le host via npx supabase start)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # compatibilité Linux/WSL2
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+        reservations:
+          memory: 128M

@@ -90,6 +90,7 @@ export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       numero_bon?: number;
       numero_beo?: string | null;
       date?: string;
+      date_transaction?: string;
       heure?: string;
       libelle: string;  // LIBELLE principal
       motif?: string;  // Copie de libelle pour compatibilité
@@ -126,6 +127,7 @@ export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       clearCache('recettes-page1');
       queryClient.invalidateQueries({ queryKey: ['recettes'] });
       queryClient.invalidateQueries({ queryKey: ['recettes-count'] });
+      queryClient.invalidateQueries({ queryKey: ['recettes-search'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
       queryClient.invalidateQueries({ queryKey: ['solde-precedent-sommaire'] });
@@ -171,17 +173,46 @@ export function useRecettes(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
 
       if (error) throw error;
     },
+    onMutate: async (id: string) => {
+      // Annuler les requêtes en cours pour éviter les écrasements
+      await queryClient.cancelQueries({ queryKey: ['recettes'] });
+      await queryClient.cancelQueries({ queryKey: ['recettes-search'] });
+      // Snapshot pour rollback
+      const previousRecettes = queryClient.getQueriesData({ queryKey: ['recettes'] });
+      const previousSearch = queryClient.getQueriesData({ queryKey: ['recettes-search'] });
+      // Suppression optimiste : retirer l'item immédiatement du cache
+      queryClient.setQueriesData({ queryKey: ['recettes'] }, (old: any) => {
+        if (!old) return old;
+        if (Array.isArray(old)) return old.filter((r: any) => r.id !== id);
+        if (old?.pages) return { ...old, pages: old.pages.map((p: any) => p.filter ? p.filter((r: any) => r.id !== id) : p) };
+        return old;
+      });
+      queryClient.setQueriesData({ queryKey: ['recettes-search'] }, (old: any) => {
+        if (!old) return old;
+        if (Array.isArray(old)) return old.filter((r: any) => r.id !== id);
+        return old;
+      });
+      return { previousRecettes, previousSearch };
+    },
     onSuccess: () => {
       clearCache('recettes-page1');
       queryClient.invalidateQueries({ queryKey: ['recettes'] });
       queryClient.invalidateQueries({ queryKey: ['recettes-count'] });
+      queryClient.invalidateQueries({ queryKey: ['recettes-search'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
       queryClient.invalidateQueries({ queryKey: ['solde-precedent-sommaire'] });
       queryClient.invalidateQueries({ queryKey: ['latest-data-date'] });
       toast({ title: 'Succès', description: 'Recette supprimée' });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _id, context: any) => {
+      // Rollback en cas d'erreur
+      if (context?.previousRecettes) {
+        context.previousRecettes.forEach(([queryKey, data]: any) => queryClient.setQueryData(queryKey, data));
+      }
+      if (context?.previousSearch) {
+        context.previousSearch.forEach(([queryKey, data]: any) => queryClient.setQueryData(queryKey, data));
+      }
       toast({ title: 'Erreur', description: error.message, variant: 'destructive' });
     },
   });

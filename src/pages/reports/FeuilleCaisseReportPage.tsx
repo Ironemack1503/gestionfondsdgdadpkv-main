@@ -232,7 +232,9 @@ export default function FeuilleCaisseReportPage() {
 
   // Generate report data
   const feuilleCaisseData = useMemo(() => {
-    const data = generateFeuilleCaisse({ dateDebut, dateFin }, soldePrecedent);
+    // Le solde d'ouverture est la recette "Solde du JJ/MM/AAAA" enregistrée en DB
+    // → on part de 0 pour éviter le double-comptage
+    const data = generateFeuilleCaisse({ dateDebut, dateFin }, 0);
     return data.map(row => {
       // Recettes → toujours 707820
       if (row.recette > 0) {
@@ -350,9 +352,9 @@ export default function FeuilleCaisseReportPage() {
       totalRecettes,
       totalDepenses,
       encaisse: totalRecettes - totalDepenses,
-      balance: soldePrecedent + totalRecettes - totalDepenses,
+      balance: totalRecettes - totalDepenses,
     };
-  }, [filteredData, soldePrecedent]);
+  }, [filteredData]);
 
   // Get title based on filters
   const getReportTitle = () => {
@@ -630,30 +632,12 @@ export default function FeuilleCaisseReportPage() {
           { header: 'Montant (FC)', key: 'depense', width: 25 },
         ];
 
-    const exportData = filterType === 'all'
-      ? [
-          {
-            date: formatDate(dateDebut),
-            numeroOrdre: '-',
-            numeroBEO: 'REPORT',
-            libelle: 'Solde de clôture mois antérieur',
-            recette: soldePrecedent > 0 ? soldePrecedent : '',
-            depense: soldePrecedent < 0 ? Math.abs(soldePrecedent) : '',
-            balance: soldePrecedent,
-          },
-          ...filteredData.map(row => ({
-            ...row,
-            date: formatDate(row.date),
-            recette: row.recette || '',
-            depense: row.depense || '',
-          })),
-        ]
-      : filteredData.map(row => ({
-          ...row,
-          date: formatDate(row.date),
-          recette: row.recette || 0,
-          depense: row.depense || 0,
-        }));
+    const exportData = filteredData.map(row => ({
+      ...row,
+      date: formatDate(row.date),
+      recette: row.recette || '',
+      depense: row.depense || '',
+    }));
 
     const subtitle = `Période: ${formatDate(dateDebut)} au ${formatDate(dateFin)} | ${getFilterLabel()}`;
 
@@ -680,24 +664,10 @@ export default function FeuilleCaisseReportPage() {
       { header: 'Balance', key: 'balance', width: 18 },
     ];
 
-    const dataWithSolde = [
-      {
-        date: formatDate(dateDebut),
-        numeroOrdre: '-',
-        numeroBEO: 'REPORT',
-        libelle: 'Solde de clôture mois antérieur',
-        recette: soldePrecedent,
-        depense: 0,
-        imp: 'SP',
-        total: soldePrecedent,
-        caisse: soldePrecedent,
-        balance: soldePrecedent,
-      },
-      ...filteredData.map(row => ({
-        ...row,
-        date: formatDate(row.date),
-      })),
-    ];
+    const dataWithSolde = filteredData.map(row => ({
+      ...row,
+      date: formatDate(row.date),
+    }));
 
     exportToExcel({
       title: getReportTitle(),
@@ -719,26 +689,10 @@ export default function FeuilleCaisseReportPage() {
       { header: 'Balance', key: 'balance', type: 'currency' as const },
     ];
 
-    const dataWithSolde = filterType === 'all'
-      ? [
-          {
-            date: formatDate(dateDebut),
-            numeroOrdre: '-',
-            numeroBEO: 'REPORT',
-            libelle: 'Solde de clôture mois antérieur',
-            recette: soldePrecedent > 0 ? soldePrecedent : 0,
-            depense: 0,
-            balance: soldePrecedent,
-          },
-          ...filteredData.map(row => ({
-            ...row,
-            date: formatDate(row.date),
-          })),
-        ]
-      : filteredData.map(row => ({
-          ...row,
-          date: formatDate(row.date),
-        }));
+    const dataWithSolde = filteredData.map(row => ({
+      ...row,
+      date: formatDate(row.date),
+    }));
 
     const summaryHTML = generateSummaryHTML([
       { label: 'Total Recettes', value: filteredTotals.totalRecettes, type: 'success' },
@@ -967,21 +921,6 @@ export default function FeuilleCaisseReportPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {/* Solde precedent row */}
-            <TableRow className="bg-muted/50 font-bold">
-              <TableCell className="whitespace-nowrap">{formatDate(dateDebut)}</TableCell>
-              <TableCell className="text-center">-</TableCell>
-              <TableCell>REPORT</TableCell>
-              <TableCell>Solde de clôture mois antérieur</TableCell>
-              <TableCell className="text-right text-success whitespace-nowrap">
-                {soldePrecedent > 0 ? formatMontant(soldePrecedent) : '-'}
-              </TableCell>
-              <TableCell className="text-right text-destructive">-</TableCell>
-              <TableCell className="text-center">SP</TableCell>
-              <TableCell className="text-right whitespace-nowrap">{formatMontant(soldePrecedent)}</TableCell>
-              <TableCell className="text-right whitespace-nowrap">{formatMontant(soldePrecedent)}</TableCell>
-              <TableCell className="text-right font-bold whitespace-nowrap">{formatMontant(soldePrecedent)}</TableCell>
-            </TableRow>
             {filteredData.map((row) => (
               <TableRow key={row.id} className="hover:bg-muted/30 font-bold">
                 <TableCell className="whitespace-nowrap">{formatDate(row.date)}</TableCell>

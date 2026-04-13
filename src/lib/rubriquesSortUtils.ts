@@ -41,30 +41,23 @@ export function sortRubriquesWithSoldeFirst<
 }
 
 /**
- * Trie les opérations en plaçant les transactions liées à "Solde du 31/10/2025" en premier
+ * Trie les opérations en plaçant les entrées "Solde du JJ/MM/AAAA" en première position.
+ * Ces recettes représentent le solde d'ouverture et doivent toujours apparaître en tête de rapport,
+ * quelque soit l'ordre d'enregistrement.
  */
 export function sortOperationsWithSoldeFirst<T extends { designation?: string; rubrique?: string }>(
   operations: T[]
 ): T[] {
   return [...operations].sort((a, b) => {
-    const aIsSolde = 
-      (a.designation?.includes('Solde du mois (antérieur)') || 
-      a.rubrique?.includes('Solde du mois (antérieur)') ||
-      a.designation?.includes('Solde du 31/10/2025') ||
-      a.rubrique?.includes('Solde du 31/10/2025'));
-    const bIsSolde = 
-      (b.designation?.includes('Solde du mois (antérieur)') || 
-      b.rubrique?.includes('Solde du mois (antérieur)') ||
-      b.designation?.includes('Solde du 31/10/2025') ||
-      b.rubrique?.includes('Solde du 31/10/2025'));
+    const aIsSolde =
+      (a.designation?.toLowerCase().startsWith('solde du') ||
+      a.rubrique?.toLowerCase().startsWith('solde du'));
+    const bIsSolde =
+      (b.designation?.toLowerCase().startsWith('solde du') ||
+      b.rubrique?.toLowerCase().startsWith('solde du'));
 
-    // Si a est solde et b ne l'est pas, a vient en premier
     if (aIsSolde && !bIsSolde) return -1;
-    
-    // Si b est solde et a ne l'est pas, b vient en premier
     if (!aIsSolde && bIsSolde) return 1;
-    
-    // Sinon, conserver l'ordre original
     return 0;
   });
 }

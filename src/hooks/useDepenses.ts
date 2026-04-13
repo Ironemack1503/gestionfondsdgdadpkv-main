@@ -119,7 +119,8 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
 
   const createDepense = useMutation({
     mutationFn: async (depense: {
-      date: string;
+      date?: string;
+      date_transaction?: string;
       heure?: string;
       numero_beo?: string | null;
       rubrique_id: string;
@@ -129,6 +130,7 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       montant: number;
       montant_lettre?: string | null;
       imp?: string | null;
+      imp_code?: string | null;
       observation?: string | null;
       service_id?: string;
     }) => {
@@ -152,6 +154,7 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
       clearCache('depenses-page1');
       queryClient.invalidateQueries({ queryKey: ['depenses'] });
       queryClient.invalidateQueries({ queryKey: ['depenses-count'] });
+      queryClient.invalidateQueries({ queryKey: ['depenses-search'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
       queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
@@ -198,17 +201,46 @@ export function useDepenses(initialPageSize = DEFAULT_PAGE_SIZE, useLocal = fals
 
       if (error) throw error;
     },
+    onMutate: async (id: string) => {
+      // Annuler les requêtes en cours pour éviter les écrasements
+      await queryClient.cancelQueries({ queryKey: ['depenses'] });
+      await queryClient.cancelQueries({ queryKey: ['depenses-search'] });
+      // Snapshot pour rollback
+      const previousDepenses = queryClient.getQueriesData({ queryKey: ['depenses'] });
+      const previousSearch = queryClient.getQueriesData({ queryKey: ['depenses-search'] });
+      // Suppression optimiste : retirer l'item immédiatement du cache
+      queryClient.setQueriesData({ queryKey: ['depenses'] }, (old: any) => {
+        if (!old) return old;
+        if (Array.isArray(old)) return old.filter((d: any) => d.id !== id);
+        if (old?.pages) return { ...old, pages: old.pages.map((p: any) => p.filter ? p.filter((d: any) => d.id !== id) : p) };
+        return old;
+      });
+      queryClient.setQueriesData({ queryKey: ['depenses-search'] }, (old: any) => {
+        if (!old) return old;
+        if (Array.isArray(old)) return old.filter((d: any) => d.id !== id);
+        return old;
+      });
+      return { previousDepenses, previousSearch };
+    },
     onSuccess: () => {
       clearCache('depenses-page1');
       queryClient.invalidateQueries({ queryKey: ['depenses'] });
       queryClient.invalidateQueries({ queryKey: ['depenses-count'] });
+      queryClient.invalidateQueries({ queryKey: ['depenses-search'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['previous-month-balance'] });
       queryClient.invalidateQueries({ queryKey: ['solde-precedent-sommaire'] });
       queryClient.invalidateQueries({ queryKey: ['latest-data-date'] });
       toast({ title: 'Succès', description: 'Dépense supprimée' });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _id, context: any) => {
+      // Rollback en cas d'erreur
+      if (context?.previousDepenses) {
+        context.previousDepenses.forEach(([queryKey, data]: any) => queryClient.setQueryData(queryKey, data));
+      }
+      if (context?.previousSearch) {
+        context.previousSearch.forEach(([queryKey, data]: any) => queryClient.setQueryData(queryKey, data));
+      }
       toast({ title: 'Erreur', description: error.message, variant: 'destructive' });
     },
   });

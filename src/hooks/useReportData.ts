@@ -189,7 +189,7 @@ export function useReportData() {
         date: r.date_transaction,
         numeroOrdre: idx + 1,
         numeroBEO: '0',
-        libelle: `${r.motif} - ${r.provenance}`,
+        libelle: r.motif || '',
         recette: Number(r.montant),
         depense: 0,
         imp: 'R',
@@ -200,13 +200,18 @@ export function useReportData() {
         date: d.date_transaction,
         numeroOrdre: idx + 1,
         numeroBEO: d.NBEO || d.numero_beo || String(d.numero_bon).padStart(4, '0'),
-        libelle: `${d.motif} - ${d.beneficiaire}`,
+        libelle: d.motif || '',
         recette: 0,
         depense: Number(d.montant),
         imp: d.imp_code || d.rubrique?.code || 'D',
         rubrique: d.imp_code || d.rubrique?.code || null,
       })),
     ].sort((a, b) => {
+      // "Solde du JJ/MM/AAAA" toujours en première position (solde d'ouverture)
+      const aIsSolde = a.libelle.toLowerCase().startsWith('solde du');
+      const bIsSolde = b.libelle.toLowerCase().startsWith('solde du');
+      if (aIsSolde && !bIsSolde) return -1;
+      if (!aIsSolde && bIsSolde) return 1;
       const dateCompare = a.date.localeCompare(b.date);
       if (dateCompare !== 0) return dateCompare;
       return a.numeroBEO.localeCompare(b.numeroBEO);

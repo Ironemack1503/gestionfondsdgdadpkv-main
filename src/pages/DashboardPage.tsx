@@ -62,28 +62,28 @@ export default function DashboardPage() {
   // Quick access operations
   const quickOperations = [
     {
-      to: "/caisse/recettes",
+      to: "/recettes/new",
       icon: ArrowUpRight,
       title: "Nouvelle recette",
       description: "Enregistrer une entrée de fonds",
       variant: "success" as const,
     },
     {
-      to: "/caisse/depenses",
+      to: "/depenses/new",
       icon: ArrowDownRight,
       title: "Nouvelle dépense",
       description: "Enregistrer une sortie de fonds",
       variant: "destructive" as const,
     },
     {
-      to: "/caisse/feuille",
+      to: "/feuille-caisse",
       icon: ClipboardList,
       title: "Feuille de caisse",
       description: "Consulter l'état du jour",
       variant: "primary" as const,
     },
     {
-      to: "/caisse/programmation",
+      to: "/programmation",
       icon: Calendar,
       title: "Programmation",
       description: "Planifier les dépenses",
@@ -195,7 +195,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium opacity-80">Solde de caisse</p>
-                  <p className="text-xs opacity-60">Total actuel disponible</p>
+                  <p className="text-xs opacity-60">Solde du mois en cours</p>
                 </div>
               </div>
               {isLoading ? (
@@ -430,59 +430,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Quick Reports & Actions */}
-        <Card className="border-2 shadow-card">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-3">
-              <div className="icon-container-accent">
-                <FileText className="w-5 h-5" />
-              </div>
-              <span>Accès rapide</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {quickReports.map((report, index) => (
-              <motion.div
-                key={report.to}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ x: 6 }}
-              >
-                <Link
-                  to={report.to}
-                  className="quick-action-link"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary">
-                    <report.icon className="w-5 h-5" />
-                  </div>
-                  <span className="font-medium flex-1">{report.title}</span>
-                  <span className="text-muted-foreground/50">→</span>
-                </Link>
-              </motion.div>
-            ))}
-
-            <div className="pt-4 border-t mt-4">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                Actions
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" asChild className="gap-2 rounded-xl h-auto py-3">
-                  <Link to="/caisse/feuille" className="flex flex-col items-center text-center">
-                    <Eye className="w-4 h-4 mb-1" />
-                    <span className="text-xs">Consulter</span>
-                  </Link>
-                </Button>
-                <Button variant="outline" size="sm" asChild className="gap-2 rounded-xl h-auto py-3 btn-accent-gradient border-0">
-                  <Link to="/rapports/caisse" className="flex flex-col items-center text-center">
-                    <Printer className="w-4 h-4 mb-1" />
-                    <span className="text-xs">Imprimer</span>
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </motion.div>
     </motion.div>
   );

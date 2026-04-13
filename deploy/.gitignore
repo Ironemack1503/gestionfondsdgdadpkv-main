@@ -1,0 +1,7 @@
+# Ignorer les fichiers sensibles dans deploy/
+.env
+nginx/certs/*.key
+nginx/certs/*.crt
+nginx/certs/*.srl
+nginx/certs/*.pem
+nginx/certs/*.pfx

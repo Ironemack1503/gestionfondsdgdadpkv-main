@@ -159,8 +159,7 @@ export default function SommaireReportPage() {
     const recetteMap = new Map<string, SommaireRow>();
     for (const r of periodRecettes) {
       const imp = (r.imp || '707820').trim();
-      const parts = [r.motif, r.provenance].filter(Boolean);
-      const designation = parts.join(' – ') || r.libelle || 'Recette';
+      const designation = r.motif || r.libelle || 'Recette';
       const key = `${imp}|${designation.toLowerCase()}`;
       if (recetteMap.has(key)) {
         recetteMap.get(key)!.recette += Number(r.montant);

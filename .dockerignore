@@ -1,0 +1,57 @@
+# ================================================================
+# .dockerignore – Exclure les fichiers inutiles du build Docker
+# Réduit la taille du contexte et accélère le build
+# ================================================================
+
+# Dépendances (réinstallées dans le conteneur)
+node_modules/
+.npm/
+
+# Git
+.git/
+.github/
+.gitattributes
+
+# Bases Access (non nécessaires au build)
+*.mdb
+*.accdb
+
+# Exports/archives
+access-exports/
+access-exports-new/
+*.xlsx
+*.pdf
+*.pdf
+
+# Supabase : données locales et fichiers temporaires
+supabase/.branches/
+supabase/.temp/
+supabase/functions/
+
+# Scripts (inutiles dans l'image)
+*.ps1
+*.bat
+tools/
+scripts/
+
+# Certificats SSL (montés en volume, pas dans l'image)
+deploy/nginx/certs/
+
+# Fichiers de documentation
+*.md
+RAPPORTS/
+logo rapport/
+
+# Variables d'environnement locales
+.env
+.env.local
+.env.*.local
+
+# Fichiers temporaires
+tmp_*
+temp-*
+*.sql
+*.session.sql
+
+# Test
+*.test.*

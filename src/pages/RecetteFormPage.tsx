@@ -197,6 +197,7 @@ export default function RecetteFormPage() {
 
     try {
       const dataToSend = {
+        date_transaction: formData.date,
         date: formData.date,
         heure: new Date().toTimeString().split(' ')[0], // Format HH:MM:SS
         numero_beo: formData.numeroBEO || null,
@@ -225,9 +226,6 @@ export default function RecetteFormPage() {
         imp: "",
       });
       setLibelleMontantLettre("");
-      
-      // Rediriger vers l'onglet liste pour voir la recette créée
-      setActiveTab('list');
     } catch (error) {
       console.error("❌ Erreur lors de l'enregistrement de la recette:", error);
       alert("Erreur lors de l'enregistrement: " + (error instanceof Error ? error.message : "Erreur inconnue"));
