@@ -103,8 +103,6 @@ $$;
 
 ALTER FUNCTION "public"."can_edit"("_user_id" "uuid") OWNER TO "postgres";
 
-
-CREATE OR REPLACE FUNCTION "public"."generate_programmation_numero_ordre"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
@@ -629,6 +627,7 @@ CREATE TABLE IF NOT EXISTS "public"."programmation_depenses" (
     "daf" "text",
     "dp" "text",
     "date_programmation" "date",
+    "created_by" uuid,
     "created_at" timestamp with time zone DEFAULT "now"()
 );
 
@@ -668,8 +667,8 @@ CREATE TABLE IF NOT EXISTS "public"."programmations" (
     "updated_at" timestamp with time zone DEFAULT "now"(),
     "numero_ordre" integer,
     CONSTRAINT "programmations_annee_check" CHECK (("annee" >= 2020)),
-    CONSTRAINT "programmations_mois_check" CHECK ((("mois" >= 1) AND ("mois" <= 12))),
-    CONSTRAINT "programmations_montant_prevu_check" CHECK (("montant_prevu" >= (0)::numeric))
+        CONSTRAINT "programmations_mois_check" CHECK ((("mois" >= 1) AND ("mois" <= 12)))
+    );
 );
 
 ALTER TABLE ONLY "public"."programmations" REPLICA IDENTITY FULL;
@@ -796,9 +795,6 @@ CREATE TABLE IF NOT EXISTS "public"."rubriques" (
     "created_by" "uuid",
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    "no_beo" "text",
-    "imp" "text",
-    "type" "text",
     "imputation" "text",
     "categorie_id" "uuid",
     "Code_Rubrique" "text",
@@ -1728,7 +1724,6 @@ ALTER TABLE "public"."alert_settings" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."alerts" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "allow_all_pgm" ON "public"."programmation_depenses" USING (true) WITH CHECK (true);
 
 
 

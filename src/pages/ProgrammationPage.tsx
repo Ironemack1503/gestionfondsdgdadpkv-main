@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Table,
   TableBody,
@@ -32,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useProgrammations, Programmation } from "@/hooks/useProgrammations";
+import { useLocalAuth } from '@/contexts/LocalAuthContext';
 import { useLocalUserRole } from "@/hooks/useLocalUserRole";
 import { exportToExcel } from "@/lib/exportUtils";
 import { jsPDF } from 'jspdf';
@@ -149,9 +151,17 @@ export default function ProgrammationPage() {
   });
 
   const { programmations, isLoading, formatMois, moisNoms, createProgrammation, updateProgrammation, deleteProgrammation } = useProgrammations(parseInt(selectedMois), parseInt(selectedAnnee));
+  const { user } = useLocalAuth();
   const { isAdmin, isInstructeur } = useLocalUserRole();
 
   const canManage = isAdmin || isInstructeur;
+
+  const getExportProgrammations = useMemo(() => {
+    if (exportSettings.exportMode === 'own') {
+      return programmations.filter((p) => p.created_by === user?.id);
+    }
+    return programmations;
+  }, [programmations, exportSettings.exportMode, user?.id]);
 
   // Filter by search query (data already filtered by month/year from hook)
   const filteredProgrammations = useMemo(() => {
@@ -160,9 +170,6 @@ export default function ProgrammationPage() {
       (p) => (p.libelle || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [programmations, searchQuery]);
-
-  // Export uses all programmations for the month
-  const getExportProgrammations = programmations;
 
   const handleOpenCreate = () => {
     setEditingProgrammation(null);
@@ -497,12 +504,19 @@ export default function ProgrammationPage() {
                   Modifier programmation
                 </Button>
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button onClick={handleOpenCreate}>
+                  {isAdmin ? (
+                    <DialogTrigger asChild>
+                      <Button onClick={handleOpenCreate}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Nouvelle programmation
+                      </Button>
+                    </DialogTrigger>
+                  ) : (
+                    <Button variant="outline" disabled title="Création réservée aux administrateurs">
                       <Plus className="w-4 h-4 mr-2" />
                       Nouvelle programmation
                     </Button>
-                  </DialogTrigger>
+                  )}
                 <DialogContent className="sm:max-w-lg">
                   <DialogHeader>
                     <DialogTitle>
@@ -570,6 +584,27 @@ export default function ProgrammationPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
+            <div className="space-y-2 p-4 border rounded-lg bg-muted/30">
+              <Label className="text-sm font-semibold">Mode d'export</Label>
+              <RadioGroup
+                value={exportSettings.exportMode}
+                onValueChange={(value) => setExportSettings({ ...exportSettings, exportMode: value as 'own' | 'merged' })}
+                className="grid gap-2"
+              >
+                <div className="flex items-center gap-3">
+                  <RadioGroupItem value="merged" id="exportModeMerged" />
+                  <Label htmlFor="exportModeMerged" className="cursor-pointer">
+                    Programmation fusionnée de tous les utilisateurs
+                  </Label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <RadioGroupItem value="own" id="exportModeOwn" />
+                  <Label htmlFor="exportModeOwn" className="cursor-pointer">
+                    Programmation saisie par l’utilisateur
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
             {/* Document info */}
             <div className="space-y-4 p-4 sm:p-6 border rounded-lg bg-muted/30">
               <h4 className="font-medium text-sm">Informations du document</h4>

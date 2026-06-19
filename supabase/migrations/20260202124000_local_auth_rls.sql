@@ -119,6 +119,13 @@ BEGIN
     EXECUTE 'CREATE POLICY "Local admin can delete programmations" ON public.programmations FOR DELETE USING (public.local_user_role() = ''admin'')';
   END IF;
 
+  IF to_regclass('public.programmation_depenses') IS NOT NULL THEN
+    EXECUTE 'CREATE POLICY "Local users can view programmation_depenses" ON public.programmation_depenses FOR SELECT USING (public.is_local_authenticated())';
+    EXECUTE 'CREATE POLICY "Local admin can create programmation_depenses" ON public.programmation_depenses FOR INSERT WITH CHECK (public.local_user_role() = ''admin'')';
+    EXECUTE 'CREATE POLICY "Local admin/instructeur can update programmation_depenses" ON public.programmation_depenses FOR UPDATE USING (public.local_user_role() IN (''admin'',''instructeur''))';
+    EXECUTE 'CREATE POLICY "Local admin can delete programmation_depenses" ON public.programmation_depenses FOR DELETE USING (public.local_user_role() = ''admin'')';
+  END IF;
+
   IF to_regclass('public.feuilles_caisse') IS NOT NULL THEN
     EXECUTE 'CREATE POLICY "Local users can view feuilles_caisse" ON public.feuilles_caisse FOR SELECT USING (public.is_local_authenticated())';
     EXECUTE 'CREATE POLICY "Local admin/instructeur can create feuilles_caisse" ON public.feuilles_caisse FOR INSERT WITH CHECK (public.local_user_role() IN (''admin'',''instructeur''))';

@@ -440,6 +440,7 @@ export type Database = {
           daf: string | null
           dp: string | null
           date_programmation: string | null
+          created_by: string | null
           created_at: string
         }
         Insert: {
@@ -454,6 +455,7 @@ export type Database = {
           daf?: string | null
           dp?: string | null
           date_programmation?: string | null
+          created_by?: string | null
           created_at?: string
         }
         Update: {
@@ -468,6 +470,7 @@ export type Database = {
           daf?: string | null
           dp?: string | null
           date_programmation?: string | null
+          created_by?: string | null
           created_at?: string
         }
         Relationships: []

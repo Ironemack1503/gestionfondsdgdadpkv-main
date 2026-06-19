@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useLocalAuth } from '@/contexts/LocalAuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useMemo, useCallback } from 'react';
 import { saveToCache, getFromCache } from './useLocalStorageCache';
@@ -16,6 +17,7 @@ export interface Programmation {
   daf: string | null;
   dp: string | null;
   date_programmation: string | null;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -37,6 +39,7 @@ const MOIS_REVERSE: Record<string, number> = Object.fromEntries(
 export function useProgrammations(selectedMois?: number, selectedAnnee?: number) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useLocalAuth();
 
   const moisStr = selectedMois ? MOIS_DB[selectedMois] : undefined;
   const anneeStr = selectedAnnee ? String(selectedAnnee) : undefined;
@@ -85,6 +88,10 @@ export function useProgrammations(selectedMois?: number, selectedAnnee?: number)
         .single();
       const maxNumero = (maxRow as any)?.numero || 0;
 
+      if (!user?.id) {
+        throw new Error('Utilisateur non authentifié');
+      }
+
       const { data, error } = await supabase
         .from('programmation_depenses' as any)
         .insert({
@@ -93,6 +100,7 @@ export function useProgrammations(selectedMois?: number, selectedAnnee?: number)
           mois: moisInsert,
           annee: anneeInsert,
           numero: maxNumero + 1,
+          created_by: user.id,
         })
         .select()
         .single();

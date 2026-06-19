@@ -14,4 +14,19 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     persistSession: true,
     autoRefreshToken: true,
   },
+  fetch: async (input, init) => {
+    const token = localStorage.getItem('local_auth_token');
+    const headers = new Headers(init?.headers);
+
+    if (token) {
+      headers.set('x-session-token', token);
+    }
+
+    const initWithHeaders = {
+      ...init,
+      headers,
+    };
+
+    return fetch(input, initWithHeaders);
+  },
 });
